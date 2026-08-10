@@ -2,7 +2,9 @@ const express = require("express");
 const crypto = require("crypto");
 const path = require("path");
 const fs = require("fs");
-const puppeteer = require("puppeteer");
+
+const puppeteer = require("puppeteer-core");
+const chromium = require("@sparticuz/chromium");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -20,54 +22,135 @@ const REPORT_IMAGE = path.join(__dirname, "report.jpg");
 let browser = null;
 
 
-// ==========================================
+// ======================================
 // TRANG CHỦ
-// ==========================================
+// ======================================
 
 app.get("/", (req, res) => {
   res.send("LINE Bot is running!");
 });
 
 
-// ==========================================
+// ======================================
 // BÁO CÁO HTML
-// ==========================================
+// ======================================
 
 app.get("/report", (req, res) => {
+
+  if (!fs.existsSync(REPORT_HTML)) {
+    return res.status(404).send(
+      "Không tìm thấy report.html"
+    );
+  }
+
   res.sendFile(REPORT_HTML);
+
 });
 
 
-// ==========================================
-// TẠO ẢNH TỪ REPORT.HTML
-// ==========================================
+// ======================================
+// ẢNH BÁO CÁO
+// ======================================
 
-async function createReportImage() {
+app.get("/report.jpg", (req, res) => {
 
-  if (!fs.existsSync(REPORT_HTML)) {
-    throw new Error("Không tìm thấy report.html");
+  if (!fs.existsSync(REPORT_IMAGE)) {
+    return res.status(404).send(
+      "Ảnh báo cáo chưa được tạo"
+    );
   }
 
-  if (!browser) {
+  res.setHeader(
+    "Content-Type",
+    "image/jpeg"
+  );
 
-    browser = await puppeteer.launch({
+  res.setHeader(
+    "Cache-Control",
+    "no-cache, no-store, must-revalidate"
+  );
+
+  res.sendFile(REPORT_IMAGE);
+
+});
+
+
+// ======================================
+// MỞ CHROME
+// ======================================
+
+async function getBrowser() {
+
+  if (browser) {
+    return browser;
+  }
+
+  console.log("Đang khởi động Chromium...");
+
+  const executablePath =
+    await chromium.executablePath();
+
+  console.log(
+    "Chromium:",
+    executablePath
+  );
+
+  browser =
+    await puppeteer.launch({
+
+      args: [
+        ...chromium.args,
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage"
+      ],
+
+      defaultViewport:
+        chromium.defaultViewport,
+
+      executablePath:
+        executablePath,
 
       headless: true,
 
-      args: [
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        "--disable-dev-shm-usage",
-        "--disable-gpu"
-      ]
+      ignoreHTTPSErrors: true
 
     });
 
+  console.log(
+    "Chromium đã khởi động."
+  );
+
+  return browser;
+}
+
+
+// ======================================
+// TẠO ẢNH TỪ REPORT.HTML
+// ======================================
+
+async function createReportImage() {
+
+  console.log(
+    "Bắt đầu tạo ảnh báo cáo..."
+  );
+
+  if (!fs.existsSync(REPORT_HTML)) {
+
+    throw new Error(
+      "Không tìm thấy report.html"
+    );
+
   }
 
-  const page = await browser.newPage();
+  const browser =
+    await getBrowser();
+
+  const page =
+    await browser.newPage();
 
 
+  // Kích thước giống giao diện mobile
   await page.setViewport({
 
     width: 520,
@@ -79,30 +162,54 @@ async function createReportImage() {
   });
 
 
-  await page.goto(
-    "file://" + REPORT_HTML,
-    {
-      waitUntil: "networkidle0"
-    }
+  const reportFile =
+    "file://" +
+    REPORT_HTML;
+
+
+  console.log(
+    "Đang mở:",
+    reportFile
   );
 
 
-  // Chờ JavaScript trong report.html
-  // dựng biểu đồ và dữ liệu
-  await new Promise(resolve => {
-    setTimeout(resolve, 800);
-  });
+  await page.goto(
+
+    reportFile,
+
+    {
+      waitUntil:
+        "networkidle0",
+
+      timeout:
+        60000
+
+    }
+
+  );
 
 
+  // Chờ JS trong HTML chạy
+  await new Promise(
+    resolve =>
+      setTimeout(resolve, 1000)
+  );
+
+
+  // Chụp toàn bộ chiều dài báo cáo
   await page.screenshot({
 
-    path: REPORT_IMAGE,
+    path:
+      REPORT_IMAGE,
 
-    fullPage: true,
+    fullPage:
+      true,
 
-    type: "jpeg",
+    type:
+      "jpeg",
 
-    quality: 88
+    quality:
+      88
 
   });
 
@@ -110,80 +217,62 @@ async function createReportImage() {
   await page.close();
 
 
+  console.log(
+    "Đã tạo:",
+    REPORT_IMAGE
+  );
+
+
   return REPORT_IMAGE;
 }
 
 
-// ==========================================
-// URL ẢNH
-// ==========================================
-
-app.get("/report.jpg", (req, res) => {
-
-  if (!fs.existsSync(REPORT_IMAGE)) {
-
-    return res
-      .status(404)
-      .send("Ảnh báo cáo chưa được tạo");
-
-  }
-
-
-  res.setHeader(
-    "Content-Type",
-    "image/jpeg"
-  );
-
-
-  res.setHeader(
-    "Cache-Control",
-    "no-cache"
-  );
-
-
-  res.sendFile(REPORT_IMAGE);
-
-});
-
-
-// ==========================================
+// ======================================
 // GỬI TIN NHẮN LINE
-// ==========================================
+// ======================================
 
 async function replyLine(
   replyToken,
   messages
 ) {
 
-  const response = await fetch(
+  const response =
+    await fetch(
 
-    "https://api.line.me/v2/bot/message/reply",
+      "https://api.line.me/v2/bot/message/reply",
 
-    {
+      {
 
-      method: "POST",
+        method:
+          "POST",
 
-      headers: {
+        headers: {
 
-        "Content-Type":
-          "application/json",
+          "Content-Type":
+            "application/json",
 
-        "Authorization":
-          "Bearer " + ACCESS_TOKEN
+          "Authorization":
+            "Bearer " +
+            ACCESS_TOKEN
 
-      },
+        },
 
-      body: JSON.stringify({
+        body:
+          JSON.stringify({
 
-        replyToken,
+            replyToken:
 
-        messages
+              replyToken,
 
-      })
+            messages:
 
-    }
+              messages
 
-  );
+          })
+
+      }
+
+    );
 
 
   if (!response.ok) {
@@ -203,9 +292,9 @@ async function replyLine(
 }
 
 
-// ==========================================
+// ======================================
 // WEBHOOK LINE
-// ==========================================
+// ======================================
 
 app.post(
 
@@ -219,13 +308,17 @@ app.post(
 
     try {
 
+      // -------------------------------
+      // Kiểm tra cấu hình
+      // -------------------------------
+
       if (
         !CHANNEL_SECRET ||
         !ACCESS_TOKEN
       ) {
 
         console.error(
-          "Thiếu LINE_CHANNEL_SECRET hoặc LINE_CHANNEL_ACCESS_TOKEN"
+          "Thiếu LINE ENV"
         );
 
         return res.sendStatus(500);
@@ -233,8 +326,14 @@ app.post(
       }
 
 
+      // -------------------------------
+      // Chữ ký LINE
+      // -------------------------------
+
       const signature =
-        req.headers["x-line-signature"];
+        req.headers[
+          "x-line-signature"
+        ];
 
 
       if (!signature) {
@@ -245,10 +344,12 @@ app.post(
 
 
       const body =
-        req.body.toString("utf8");
+        req.body.toString(
+          "utf8"
+        );
 
 
-      const expectedSignature =
+      const expected =
         crypto
 
           .createHmac(
@@ -262,7 +363,7 @@ app.post(
 
 
       if (
-        expectedSignature !==
+        expected !==
         signature
       ) {
 
@@ -279,16 +380,24 @@ app.post(
         JSON.parse(body);
 
 
+      // -------------------------------
+      // Xử lý event
+      // -------------------------------
+
       for (
-        const event of data.events || []
+        const event of
+        data.events || []
       ) {
 
 
         if (
 
-          event.type !== "message" ||
+          event.type !==
+            "message" ||
 
-          event.message?.type !==
+          !event.message ||
+
+          event.message.type !==
             "text" ||
 
           !event.replyToken
@@ -301,27 +410,43 @@ app.post(
 
 
         const text =
-          (event.message.text || "")
+          (
+            event.message.text ||
+            ""
+          )
 
             .toLowerCase()
 
-            .replace(/\s+/g, " ")
+            .replace(
+              /\s+/g,
+              " "
+            )
 
             .trim();
 
 
-        // ==================================
+        // =================================
         // BC SỨC KHỎE
-        // ==================================
+        // =================================
 
         if (
-          text.includes("bc sức khỏe")
+          text.includes(
+            "bc sức khỏe"
+          )
         ) {
 
           try {
 
             console.log(
-              "Đang tạo ảnh BC SỨC KHỎE..."
+              "================================"
+            );
+
+            console.log(
+              "NHẬN BC SỨC KHỎE"
+            );
+
+            console.log(
+              "Đang tạo ảnh..."
             );
 
 
@@ -339,6 +464,12 @@ app.post(
               "/report";
 
 
+            console.log(
+              "Ảnh:",
+              imageUrl
+            );
+
+
             await replyLine(
 
               event.replyToken,
@@ -347,22 +478,21 @@ app.post(
 
                 {
 
-                  type: "text",
+                  type:
+                    "text",
 
                   text:
                     "📊 BC SỨC KHỎE\n\n" +
-
                     "BHX Mỹ Qưới · 28717\n\n" +
-
-                    "Em gửi anh ảnh báo cáo FULL " +
+                    "Em gửi anh báo cáo FULL " +
                     "theo mẫu cũ + data cũ 👇"
 
                 },
 
-
                 {
 
-                  type: "image",
+                  type:
+                    "image",
 
                   originalContentUrl:
                     imageUrl,
@@ -372,13 +502,13 @@ app.post(
 
                 },
 
-
                 {
 
-                  type: "text",
+                  type:
+                    "text",
 
                   text:
-                    "🔗 Bản báo cáo đầy đủ:\n" +
+                    "🔗 Bản đầy đủ:\n" +
                     reportUrl
 
                 }
@@ -388,10 +518,19 @@ app.post(
             );
 
 
-          } catch (error) {
+            console.log(
+              "ĐÃ GỬI ẢNH CHO LINE"
+            );
+
+          }
+
+          catch (error) {
 
             console.error(
-              "Lỗi tạo ảnh:",
+              "LỖI TẠO ẢNH:"
+            );
+
+            console.error(
               error
             );
 
@@ -404,13 +543,12 @@ app.post(
 
                 {
 
-                  type: "text",
+                  type:
+                    "text",
 
                   text:
-                    "⚠️ Chưa tạo được ảnh báo cáo.\n\n" +
-
+                    "⚠️ Không tạo được ảnh báo cáo.\n\n" +
                     "Anh mở bản FULL tại:\n" +
-
                     BASE_URL +
                     "/report"
 
@@ -428,9 +566,9 @@ app.post(
         }
 
 
-        // ==================================
+        // =================================
         // HELLO
-        // ==================================
+        // =================================
 
         if (
 
@@ -438,7 +576,8 @@ app.post(
 
           text === "hi" ||
 
-          text === "xin chào"
+          text ===
+            "xin chào"
 
         ) {
 
@@ -450,11 +589,11 @@ app.post(
 
               {
 
-                type: "text",
+                type:
+                  "text",
 
                 text:
                   "Xin chào anh 👋\n\n" +
-
                   "Gõ BC SỨC KHỎE " +
                   "để nhận ảnh báo cáo."
 
@@ -470,9 +609,9 @@ app.post(
         }
 
 
-        // ==================================
+        // =================================
         // TIN NHẮN KHÁC
-        // ==================================
+        // =================================
 
         await replyLine(
 
@@ -482,7 +621,8 @@ app.post(
 
             {
 
-              type: "text",
+              type:
+                "text",
 
               text:
                 "Anh gõ BC SỨC KHỎE " +
@@ -500,13 +640,17 @@ app.post(
       return res.sendStatus(200);
 
 
-    } catch (error) {
+    }
+
+    catch (error) {
 
       console.error(
-        "Webhook error:",
-        error
+        "WEBHOOK ERROR:"
       );
 
+      console.error(
+        error
+      );
 
       return res.sendStatus(500);
 
@@ -517,9 +661,9 @@ app.post(
 );
 
 
-// ==========================================
-// KHỞI ĐỘNG SERVER
-// ==========================================
+// ======================================
+// START SERVER
+// ======================================
 
 app.listen(
 
@@ -541,13 +685,21 @@ app.listen(
     );
 
     console.log(
-      "REPORT:",
-      BASE_URL + "/report"
+      "REPORT:"
     );
 
     console.log(
-      "IMAGE:",
-      BASE_URL + "/report.jpg"
+      BASE_URL +
+      "/report"
+    );
+
+    console.log(
+      "IMAGE:"
+    );
+
+    console.log(
+      BASE_URL +
+      "/report.jpg"
     );
 
     console.log(
