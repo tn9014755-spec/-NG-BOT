@@ -1,13 +1,14 @@
 {
   "name": "ng-bot",
   "version": "1.0.0",
-  "description": "LINE Bot báo cáo sức khỏe",
+  "description": "LINE Bot BC SỨC KHỎE",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
+    "@sparticuz/chromium": "^149.0.0",
     "express": "^4.21.2",
-    "puppeteer": "^24.16.0"
+    "puppeteer-core": "^24.43.1"
   }
 }
