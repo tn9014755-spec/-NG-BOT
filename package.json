@@ -1,4 +1,13 @@
-"dependencies": {
-  "express": "^4.21.2",
-  "sharp": "^0.33.5"
+{
+  "name": "ng-bot",
+  "version": "1.0.0",
+  "description": "LINE Bot",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "sharp": "^0.33.5"
+  }
 }
