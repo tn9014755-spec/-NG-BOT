@@ -13,3 +13,7 @@
   }
 }
 }
+"scripts": {
+  "postinstall": "npx puppeteer browsers install chrome",
+  "start": "node index.js"
+}
