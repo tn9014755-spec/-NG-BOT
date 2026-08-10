@@ -21,63 +21,29 @@ const REPORT_IMAGE = path.join(__dirname, "report.jpg");
 
 let browser = null;
 
-
-// ======================================
+// =====================================
 // TRANG CHỦ
-// ======================================
+// =====================================
 
 app.get("/", (req, res) => {
   res.send("LINE Bot is running!");
 });
 
-
-// ======================================
+// =====================================
 // BÁO CÁO HTML
-// ======================================
+// =====================================
 
 app.get("/report", (req, res) => {
-
   if (!fs.existsSync(REPORT_HTML)) {
-    return res.status(404).send(
-      "Không tìm thấy report.html"
-    );
+    return res.status(404).send("Không tìm thấy report.html");
   }
 
   res.sendFile(REPORT_HTML);
-
 });
 
-
-// ======================================
-// ẢNH BÁO CÁO
-// ======================================
-
-app.get("/report.jpg", (req, res) => {
-
-  if (!fs.existsSync(REPORT_IMAGE)) {
-    return res.status(404).send(
-      "Ảnh báo cáo chưa được tạo"
-    );
-  }
-
-  res.setHeader(
-    "Content-Type",
-    "image/jpeg"
-  );
-
-  res.setHeader(
-    "Cache-Control",
-    "no-cache, no-store, must-revalidate"
-  );
-
-  res.sendFile(REPORT_IMAGE);
-
-});
-
-
-// ======================================
-// MỞ CHROME
-// ======================================
+// =====================================
+// KHỞI ĐỘNG CHROMIUM
+// =====================================
 
 async function getBrowser() {
 
@@ -91,226 +57,195 @@ async function getBrowser() {
     await chromium.executablePath();
 
   console.log(
-    "Chromium:",
+    "Chromium executable:",
     executablePath
   );
 
-  browser =
-    await puppeteer.launch({
+  browser = await puppeteer.launch({
+    args: [
+      ...chromium.args,
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-dev-shm-usage",
+      "--disable-gpu"
+    ],
 
-      args: [
-        ...chromium.args,
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        "--disable-dev-shm-usage"
-      ],
+    executablePath: executablePath,
 
-      defaultViewport:
-        chromium.defaultViewport,
+    headless: true,
 
-      executablePath:
-        executablePath,
+    ignoreHTTPSErrors: true
+  });
 
-      headless: true,
-
-      ignoreHTTPSErrors: true
-
-    });
-
-  console.log(
-    "Chromium đã khởi động."
-  );
+  console.log("Chromium đã khởi động.");
 
   return browser;
 }
 
-
-// ======================================
-// TẠO ẢNH TỪ REPORT.HTML
-// ======================================
+// =====================================
+// TẠO ẢNH BÁO CÁO
+// =====================================
 
 async function createReportImage() {
 
-  console.log(
-    "Bắt đầu tạo ảnh báo cáo..."
-  );
+  console.log("===== BẮT ĐẦU TẠO ẢNH =====");
 
   if (!fs.existsSync(REPORT_HTML)) {
-
     throw new Error(
       "Không tìm thấy report.html"
     );
-
   }
 
-  const browser =
-    await getBrowser();
+  const br = await getBrowser();
 
-  const page =
-    await browser.newPage();
+  const page = await br.newPage();
 
-
-  // Kích thước giống giao diện mobile
   await page.setViewport({
-
     width: 520,
-
     height: 900,
-
     deviceScaleFactor: 2
-
   });
 
-
-  const reportFile =
-    "file://" +
-    REPORT_HTML;
-
+  const fileUrl =
+    "file://" + REPORT_HTML;
 
   console.log(
     "Đang mở:",
-    reportFile
+    fileUrl
   );
 
-
-  await page.goto(
-
-    reportFile,
-
-    {
-      waitUntil:
-        "networkidle0",
-
-      timeout:
-        60000
-
-    }
-
-  );
-
-
-  // Chờ JS trong HTML chạy
-  await new Promise(
-    resolve =>
-      setTimeout(resolve, 1000)
-  );
-
-
-  // Chụp toàn bộ chiều dài báo cáo
-  await page.screenshot({
-
-    path:
-      REPORT_IMAGE,
-
-    fullPage:
-      true,
-
-    type:
-      "jpeg",
-
-    quality:
-      88
-
+  await page.goto(fileUrl, {
+    waitUntil: "networkidle0",
+    timeout: 60000
   });
 
+  // Cho JavaScript trong report.html chạy
+  await new Promise(resolve => {
+    setTimeout(resolve, 1500);
+  });
+
+  await page.screenshot({
+    path: REPORT_IMAGE,
+    fullPage: true,
+    type: "jpeg",
+    quality: 85
+  });
 
   await page.close();
 
-
   console.log(
-    "Đã tạo:",
+    "ĐÃ TẠO ẢNH:",
     REPORT_IMAGE
   );
-
 
   return REPORT_IMAGE;
 }
 
+// =====================================
+// URL ẢNH
+// Nếu chưa có -> tự tạo
+// =====================================
 
-// ======================================
-// GỬI TIN NHẮN LINE
-// ======================================
+app.get("/report.jpg", async (req, res) => {
+
+  try {
+
+    if (!fs.existsSync(REPORT_IMAGE)) {
+
+      console.log(
+        "Chưa có report.jpg -> tạo mới..."
+      );
+
+      await createReportImage();
+
+    }
+
+    if (!fs.existsSync(REPORT_IMAGE)) {
+
+      return res.status(500).send(
+        "Không tạo được ảnh báo cáo"
+      );
+
+    }
+
+    res.setHeader(
+      "Content-Type",
+      "image/jpeg"
+    );
+
+    res.setHeader(
+      "Cache-Control",
+      "no-cache, no-store, must-revalidate"
+    );
+
+    res.sendFile(REPORT_IMAGE);
+
+  } catch (error) {
+
+    console.error(
+      "LỖI REPORT.JPG:"
+    );
+
+    console.error(error);
+
+    res.status(500).send(
+      "Lỗi tạo ảnh báo cáo: " +
+      error.message
+    );
+  }
+});
+
+// =====================================
+// GỬI LINE
+// =====================================
 
 async function replyLine(
   replyToken,
   messages
 ) {
 
-  const response =
-    await fetch(
+  const response = await fetch(
+    "https://api.line.me/v2/bot/message/reply",
+    {
+      method: "POST",
 
-      "https://api.line.me/v2/bot/message/reply",
+      headers: {
+        "Content-Type":
+          "application/json",
 
-      {
+        "Authorization":
+          "Bearer " + ACCESS_TOKEN
+      },
 
-        method:
-          "POST",
-
-        headers: {
-
-          "Content-Type":
-            "application/json",
-
-          "Authorization":
-            "Bearer " +
-            ACCESS_TOKEN
-
-        },
-
-        body:
-          JSON.stringify({
-
-            replyToken:
-
-              replyToken,
-
-            messages:
-
-              messages
-
-          })
-
-      }
-
-    );
-
+      body: JSON.stringify({
+        replyToken,
+        messages
+      })
+    }
+  );
 
   if (!response.ok) {
 
     console.error(
-
-      "LINE reply error:",
-
+      "LINE ERROR:",
       response.status,
-
       await response.text()
-
     );
-
   }
-
 }
 
-
-// ======================================
-// WEBHOOK LINE
-// ======================================
+// =====================================
+// WEBHOOK
+// =====================================
 
 app.post(
-
   "/webhook",
-
   express.raw({
     type: "application/json"
   }),
-
   async (req, res) => {
 
     try {
-
-      // -------------------------------
-      // Kiểm tra cấu hình
-      // -------------------------------
 
       if (
         !CHANNEL_SECRET ||
@@ -322,49 +257,29 @@ app.post(
         );
 
         return res.sendStatus(500);
-
       }
-
-
-      // -------------------------------
-      // Chữ ký LINE
-      // -------------------------------
 
       const signature =
-        req.headers[
-          "x-line-signature"
-        ];
-
+        req.headers["x-line-signature"];
 
       if (!signature) {
-
         return res.sendStatus(401);
-
       }
 
-
       const body =
-        req.body.toString(
-          "utf8"
-        );
-
+        req.body.toString("utf8");
 
       const expected =
         crypto
-
           .createHmac(
             "sha256",
             CHANNEL_SECRET
           )
-
           .update(body)
-
           .digest("base64");
 
-
       if (
-        expected !==
-        signature
+        expected !== signature
       ) {
 
         console.error(
@@ -372,303 +287,183 @@ app.post(
         );
 
         return res.sendStatus(401);
-
       }
-
 
       const data =
         JSON.parse(body);
-
-
-      // -------------------------------
-      // Xử lý event
-      // -------------------------------
 
       for (
         const event of
         data.events || []
       ) {
 
-
         if (
-
-          event.type !==
-            "message" ||
-
+          event.type !== "message" ||
           !event.message ||
-
-          event.message.type !==
-            "text" ||
-
+          event.message.type !== "text" ||
           !event.replyToken
-
         ) {
-
           continue;
-
         }
 
-
         const text =
-          (
-            event.message.text ||
-            ""
-          )
-
+          (event.message.text || "")
             .toLowerCase()
-
-            .replace(
-              /\s+/g,
-              " "
-            )
-
+            .replace(/\s+/g, " ")
             .trim();
-
 
         // =================================
         // BC SỨC KHỎE
         // =================================
 
         if (
-          text.includes(
-            "bc sức khỏe"
-          )
+          text.includes("bc sức khỏe")
         ) {
 
           try {
 
             console.log(
-              "================================"
-            );
-
-            console.log(
               "NHẬN BC SỨC KHỎE"
             );
 
-            console.log(
-              "Đang tạo ảnh..."
-            );
-
-
             await createReportImage();
-
 
             const imageUrl =
               BASE_URL +
               "/report.jpg?v=" +
               Date.now();
 
-
             const reportUrl =
               BASE_URL +
               "/report";
 
-
-            console.log(
-              "Ảnh:",
-              imageUrl
-            );
-
-
             await replyLine(
-
               event.replyToken,
-
               [
 
                 {
-
-                  type:
-                    "text",
+                  type: "text",
 
                   text:
                     "📊 BC SỨC KHỎE\n\n" +
                     "BHX Mỹ Qưới · 28717\n\n" +
-                    "Em gửi anh báo cáo FULL " +
-                    "theo mẫu cũ + data cũ 👇"
-
+                    "Báo cáo FULL theo mẫu cũ + data cũ 👇"
                 },
 
                 {
-
-                  type:
-                    "image",
+                  type: "image",
 
                   originalContentUrl:
                     imageUrl,
 
                   previewImageUrl:
                     imageUrl
-
                 },
 
                 {
-
-                  type:
-                    "text",
+                  type: "text",
 
                   text:
                     "🔗 Bản đầy đủ:\n" +
                     reportUrl
-
                 }
 
               ]
-
             );
-
 
             console.log(
               "ĐÃ GỬI ẢNH CHO LINE"
             );
 
-          }
-
-          catch (error) {
+          } catch (error) {
 
             console.error(
               "LỖI TẠO ẢNH:"
             );
 
-            console.error(
-              error
-            );
-
+            console.error(error);
 
             await replyLine(
-
               event.replyToken,
-
               [
-
                 {
-
-                  type:
-                    "text",
+                  type: "text",
 
                   text:
-                    "⚠️ Không tạo được ảnh báo cáo.\n\n" +
-                    "Anh mở bản FULL tại:\n" +
+                    "⚠️ Chưa tạo được ảnh.\n\n" +
+                    "Anh mở:\n" +
                     BASE_URL +
-                    "/report"
-
+                    "/report.jpg"
                 }
-
               ]
-
             );
-
           }
 
-
           continue;
-
         }
-
 
         // =================================
         // HELLO
         // =================================
 
         if (
-
           text === "hello" ||
-
           text === "hi" ||
-
-          text ===
-            "xin chào"
-
+          text === "xin chào"
         ) {
 
           await replyLine(
-
             event.replyToken,
-
             [
-
               {
-
-                type:
-                  "text",
-
+                type: "text",
                 text:
                   "Xin chào anh 👋\n\n" +
-                  "Gõ BC SỨC KHỎE " +
-                  "để nhận ảnh báo cáo."
-
+                  "Gõ BC SỨC KHỎE để nhận ảnh báo cáo."
               }
-
             ]
-
           );
 
-
           continue;
-
         }
 
-
         // =================================
-        // TIN NHẮN KHÁC
+        // KHÁC
         // =================================
 
         await replyLine(
-
           event.replyToken,
-
           [
-
             {
-
-              type:
-                "text",
+              type: "text",
 
               text:
-                "Anh gõ BC SỨC KHỎE " +
-                "để nhận ảnh báo cáo FULL nhé."
-
+                "Anh gõ BC SỨC KHỎE để nhận ảnh báo cáo FULL nhé."
             }
-
           ]
-
         );
-
       }
-
 
       return res.sendStatus(200);
 
-
-    }
-
-    catch (error) {
+    } catch (error) {
 
       console.error(
-        "WEBHOOK ERROR:"
-      );
-
-      console.error(
+        "WEBHOOK ERROR:",
         error
       );
 
       return res.sendStatus(500);
-
     }
-
   }
-
 );
 
-
-// ======================================
-// START SERVER
-// ======================================
+// =====================================
+// START
+// =====================================
 
 app.listen(
-
   PORT,
-
   () => {
 
     console.log(
@@ -685,27 +480,17 @@ app.listen(
     );
 
     console.log(
-      "REPORT:"
+      "REPORT:",
+      BASE_URL + "/report"
     );
 
     console.log(
-      BASE_URL +
-      "/report"
-    );
-
-    console.log(
-      "IMAGE:"
-    );
-
-    console.log(
-      BASE_URL +
-      "/report.jpg"
+      "IMAGE:",
+      BASE_URL + "/report.jpg"
     );
 
     console.log(
       "================================"
     );
-
   }
-
 );
