@@ -4,16 +4,10 @@
   "description": "LINE Bot báo cáo sức khỏe",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js",
-    "postinstall": "npx puppeteer browsers install chrome"
+    "start": "node index.js"
   },
   "dependencies": {
     "express": "^4.21.2",
     "puppeteer": "^24.16.0"
   }
-}
-}
-"scripts": {
-  "postinstall": "npx puppeteer browsers install chrome",
-  "start": "node index.js"
 }
