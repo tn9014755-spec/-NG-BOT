@@ -1,13 +1,13 @@
 {
   "name": "ng-bot",
   "version": "1.0.0",
-  "description": "LINE Bot",
+  "description": "LINE Bot báo cáo sức khỏe",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
     "express": "^4.21.2",
-    "sharp": "^0.33.5"
+    "puppeteer": "^24.16.0"
   }
 }
