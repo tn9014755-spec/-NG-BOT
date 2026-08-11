@@ -7,214 +7,72 @@ const sharp = require("sharp");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-
 const CHANNEL_SECRET = process.env.LINE_CHANNEL_SECRET;
 const ACCESS_TOKEN = process.env.LINE_CHANNEL_ACCESS_TOKEN;
-const BASE_URL =
-  process.env.RENDER_EXTERNAL_URL || "https://ng-bot-c0im.onrender.com";
-
+const BASE_URL = process.env.RENDER_EXTERNAL_URL || "https://ng-bot-c0im.onrender.com";
 const REPORT_HTML = path.join(__dirname, "report.html");
 const REPORT_JPG = path.join(__dirname, "report.jpg");
 const PREVIEW_JPG = path.join(__dirname, "report-preview.jpg");
 
-let browserPromise = null;
+// DATA MỚI NHẤT 11/08/2026
+const TODAY = { revenue:"3.905.589 đ", offline:"3.613.923", online:"291.666", bills:"45", avgBill:"86.791 đ", cumulative:"362.869.759 đ", offlineCum:"329.786.893 đ", onlineCum:"33.082.866 đ" };
 
-async function getBrowser() {
-  if (!browserPromise) {
-    browserPromise = puppeteer.launch({
-      headless: "new",
-      args: [
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        "--disable-dev-shm-usage",
-        "--disable-gpu",
-      ],
-    });
-  }
+function latestReportHtml(){
+  let html=fs.readFileSync(REPORT_HTML,"utf8");
+  const r=(a,b)=>{html=html.split(a).join(b)};
+  r("13.208.925 đ",TODAY.revenue); r("8.153.623",TODAY.offline); r("5.055.302",TODAY.online);
+  r("BILL: 96","BILL: 45"); r("137.593 đ",TODAY.avgBill); r("372.173.095 đ",TODAY.cumulative);
+  r("2.807 bill · BQ 132.587 đ","2.756 bill · BQ 131.646 đ");
+  r("334.326.593 đ",TODAY.offlineCum); r("37.846.502 đ",TODAY.onlineCum);
+  r("2.762 bill","2.711 bill"); r("50 bill","45 bill");
+  r("['11/08',13208925,96]","['11/08',3905589,45]");
+  return html;
+}
+
+let browserPromise=null;
+async function getBrowser(){
+  if(!browserPromise) browserPromise=puppeteer.launch({headless:"new",args:["--no-sandbox","--disable-setuid-sandbox","--disable-dev-shm-usage","--disable-gpu"]});
   return browserPromise;
 }
 
-async function makeReportImages() {
-  const browser = await getBrowser();
-  const page = await browser.newPage();
-
-  await page.setViewport({
-    width: 520,
-    height: 900,
-    deviceScaleFactor: 2,
+async function makeReportImages(){
+  const browser=await getBrowser(); const page=await browser.newPage();
+  await page.setViewport({width:520,height:900,deviceScaleFactor:2});
+  fs.writeFileSync(REPORT_HTML,latestReportHtml(),"utf8");
+  await page.goto("file://"+REPORT_HTML,{waitUntil:"networkidle0"});
+  await page.evaluate(()=>{
+    const D=[["01/08",36943285,251],["02/08",38251644,254],["03/08",33105482,286],["04/08",31654201,280],["05/08",40049429,301],["06/08",37699905,293],["07/08",35551563,258],["08/08",34926908,269],["09/08",39621620,268],["10/08",31260133,251],["11/08",3905589,45]];
+    const days=document.getElementById("days"),bars=document.getElementById("bars"),detail=document.getElementById("detail"); if(!days||!bars||!detail)return;
+    days.innerHTML=""; bars.innerHTML=""; const max=Math.max(...D.map(x=>x[1]));
+    D.forEach((x,i)=>{const d=document.createElement("div");d.className="day"+(i===10?" on":"");d.innerHTML=`<b>${x[0].slice(0,2)}</b><span>${(Math.round(x[1]/1e5)/10).toFixed(1)}tr</span>`;days.appendChild(d);const b=document.createElement("div");b.className="bar"+(i===10?" on":"");b.style.height=Math.max(4,x[1]/max*100)+"%";bars.appendChild(b)});
+    const x=D[10],money=n=>Math.round(n).toLocaleString("vi-VN")+" đ",diff=(x[1]/D[9][1]-1)*100;
+    detail.innerHTML=`<div><span>Ngày</span><b>11/08/2026</b></div><div><span>Doanh thu</span><b>${money(x[1])}</b></div><div><span>Bill</span><b>${x[2]}</b></div><div><span>Giá trị bill BQ</span><b>${money(x[1]/x[2])}</b></div><div><span>So với ngày trước</span><b class="${diff>=0?"up":"down"}">${diff>=0?"+":""}${diff.toFixed(1).replace(".",",")}%</b></div>`;
   });
-
-  await page.goto("file://" + REPORT_HTML, {
-    waitUntil: "networkidle0",
-  });
-
-  await new Promise(resolve => setTimeout(resolve, 300));
-
-  const png = await page.screenshot({
-    fullPage: true,
-    type: "png",
-  });
-
-  await page.close();
-
-  await sharp(png).jpeg({ quality: 88, mozjpeg: true }).toFile(REPORT_JPG);
-
-  await sharp(png)
-    .resize({ width: 520, withoutEnlargement: true })
-    .jpeg({ quality: 70, mozjpeg: true })
-    .toFile(PREVIEW_JPG);
+  await new Promise(resolve=>setTimeout(resolve,200));
+  const png=await page.screenshot({fullPage:true,type:"png"}); await page.close();
+  await sharp(png).jpeg({quality:88,mozjpeg:true}).toFile(REPORT_JPG);
+  await sharp(png).resize({width:520,withoutEnlargement:true}).jpeg({quality:70,mozjpeg:true}).toFile(PREVIEW_JPG);
 }
+async function ensureImages(){await makeReportImages()}
 
-async function ensureImages() {
-  if (!fs.existsSync(REPORT_JPG) || !fs.existsSync(PREVIEW_JPG)) {
-    await makeReportImages();
-  }
-}
+app.get("/",(req,res)=>res.send("LINE Bot is running!"));
+app.get("/report",(req,res)=>{res.set("Cache-Control","no-cache,no-store,must-revalidate");res.type("html").send(latestReportHtml())});
+app.get("/report.jpg",async(req,res)=>{try{await ensureImages();res.set("Content-Type","image/jpeg");res.set("Cache-Control","no-cache,no-store,must-revalidate");res.sendFile(REPORT_JPG)}catch(e){console.error(e);res.sendStatus(500)}});
+app.get("/report-preview.jpg",async(req,res)=>{try{await ensureImages();res.set("Content-Type","image/jpeg");res.set("Cache-Control","no-cache,no-store,must-revalidate");res.sendFile(PREVIEW_JPG)}catch(e){console.error(e);res.sendStatus(500)}});
 
-app.get("/", (req, res) => {
-  res.send("LINE Bot is running!");
-});
+async function replyLine(replyToken,messages){const response=await fetch("https://api.line.me/v2/bot/message/reply",{method:"POST",headers:{"Content-Type":"application/json",Authorization:"Bearer "+ACCESS_TOKEN},body:JSON.stringify({replyToken,messages})});if(!response.ok)console.error("LINE reply failed:",response.status,await response.text())}
 
-app.get("/report", (req, res) => {
-  res.sendFile(REPORT_HTML);
-});
+app.post("/webhook",express.raw({type:"application/json"}),async(req,res)=>{try{
+  const signature=req.headers["x-line-signature"],body=req.body.toString("utf8"); if(!CHANNEL_SECRET||!ACCESS_TOKEN)return res.sendStatus(500);
+  const expected=crypto.createHmac("sha256",CHANNEL_SECRET).update(body).digest("base64"); if(!signature||expected!==signature)return res.sendStatus(401);
+  const data=JSON.parse(body);
+  for(const event of data.events||[]){if(event.type!=="message"||!event.message||event.message.type!=="text"||!event.replyToken)continue;
+    const text=(event.message.text||"").toLowerCase().replace(/\s+/g," ").trim();
+    if(text.includes("bc sức khỏe")){await makeReportImages();const original=`${BASE_URL}/report.jpg?v=${Date.now()}`,preview=`${BASE_URL}/report-preview.jpg?v=${Date.now()}`,link=`${BASE_URL}/report?v=${Date.now()}`;
+      await replyLine(event.replyToken,[{type:"text",text:`📊 BC SỨC KHỎE\n\n💪 Đã cập nhật DATA mới nhất.\n💰 DT hôm nay: ${TODAY.revenue}\n💻 HTML xem trên laptop: ${link}\n\n@all`},{type:"image",originalContentUrl:original,previewImageUrl:preview}]);
+    }else if(text==="hello"||text==="hi")await replyLine(event.replyToken,[{type:"text",text:"Xin chào anh 👋\nGõ BC SỨC KHỎE để nhận báo cáo FULL."}]);
+    else await replyLine(event.replyToken,[{type:"text",text:"Anh gõ BC SỨC KHỎE để nhận báo cáo FULL dạng hình ảnh + link HTML."}]);
+  } return res.sendStatus(200);
+}catch(error){console.error("Webhook error:",error);return res.sendStatus(500)}});
 
-app.get("/report.jpg", async (req, res) => {
-  try {
-    await ensureImages();
-    res.set("Content-Type", "image/jpeg");
-    res.set("Cache-Control", "no-cache, no-store, must-revalidate");
-    res.sendFile(REPORT_JPG);
-  } catch (e) {
-    console.error("report.jpg error:", e);
-    res.sendStatus(500);
-  }
-});
-
-app.get("/report-preview.jpg", async (req, res) => {
-  try {
-    await ensureImages();
-    res.set("Content-Type", "image/jpeg");
-    res.set("Cache-Control", "no-cache, no-store, must-revalidate");
-    res.sendFile(PREVIEW_JPG);
-  } catch (e) {
-    console.error("preview error:", e);
-    res.sendStatus(500);
-  }
-});
-
-async function replyLine(replyToken, messages) {
-  const response = await fetch("https://api.line.me/v2/bot/message/reply", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: "Bearer " + ACCESS_TOKEN,
-    },
-    body: JSON.stringify({
-      replyToken,
-      messages,
-    }),
-  });
-
-  if (!response.ok) {
-    console.error("LINE reply failed:", response.status, await response.text());
-  }
-}
-
-app.post(
-  "/webhook",
-  express.raw({ type: "application/json" }),
-  async (req, res) => {
-    try {
-      const signature = req.headers["x-line-signature"];
-      const body = req.body.toString("utf8");
-
-      if (!CHANNEL_SECRET || !ACCESS_TOKEN) {
-        console.error(
-          "Thiếu LINE_CHANNEL_SECRET hoặc LINE_CHANNEL_ACCESS_TOKEN"
-        );
-        return res.sendStatus(500);
-      }
-
-      const expected = crypto
-        .createHmac("sha256", CHANNEL_SECRET)
-        .update(body)
-        .digest("base64");
-
-      if (!signature || expected !== signature) {
-        return res.sendStatus(401);
-      }
-
-      const data = JSON.parse(body);
-
-      for (const event of data.events || []) {
-        if (
-          event.type !== "message" ||
-          !event.message ||
-          event.message.type !== "text" ||
-          !event.replyToken
-        ) {
-          continue;
-        }
-
-        const text = (event.message.text || "")
-          .toLowerCase()
-          .replace(/\s+/g, " ")
-          .trim();
-
-        if (text.includes("bc sức khỏe")) {
-          await makeReportImages();
-
-          const original = `${BASE_URL}/report.jpg?v=${Date.now()}`;
-          const preview = `${BASE_URL}/report-preview.jpg?v=${Date.now()}`;
-          const reportLink = `${BASE_URL}/report`;
-
-          await replyLine(event.replyToken, [
-            {
-              type: "text",
-              text: `📊 BC SỨC KHỎE\n\n💪 Bản mới nhất đã cập nhật.\n🟢 Màu sắc mạnh hơn · chữ/số nổi bật\n💻 HTML: ${reportLink}\n\n@all`,
-            },
-            {
-              type: "image",
-              originalContentUrl: original,
-              previewImageUrl: preview,
-            },
-          ]);
-        } else if (text === "hello" || text === "hi") {
-          await replyLine(event.replyToken, [
-            {
-              type: "text",
-              text: "Xin chào anh 👋\nGõ BC SỨC KHỎE để nhận báo cáo FULL.",
-            },
-          ]);
-        } else {
-          await replyLine(event.replyToken, [
-            {
-              type: "text",
-              text: "Anh gõ BC SỨC KHỎE để nhận báo cáo FULL dạng hình ảnh.",
-            },
-          ]);
-        }
-      }
-
-      return res.sendStatus(200);
-    } catch (error) {
-      console.error("Webhook error:", error);
-      return res.sendStatus(500);
-    }
-  }
-);
-
-app.listen(PORT, async () => {
-  console.log(`LINE Bot running on port ${PORT}`);
-  console.log(`Report: ${BASE_URL}/report`);
-  console.log(`Image: ${BASE_URL}/report.jpg`);
-  console.log(`Preview: ${BASE_URL}/report-preview.jpg`);
-
-  try {
-    await makeReportImages();
-    console.log("FULL report images created successfully.");
-  } catch (e) {
-    console.error("Initial report image error:", e);
-  }
-});
+app.listen(PORT,async()=>{console.log(`LINE Bot running on port ${PORT}`);console.log(`Report: ${BASE_URL}/report`);try{await makeReportImages();console.log("FULL report images created successfully.")}catch(e){console.error("Initial report image error:",e)}});
