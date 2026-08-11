@@ -1,0 +1,13 @@
+{
+  "ngay": "2026-08-11",
+  "ma_sieu_thi": 28717,
+  "ten_sieu_thi": "BHX_CTH_MQU - Mỹ Qưới",
+  "doanh_thu_offline": 8153623,
+  "doanh_thu_online": 5055302,
+  "tong_doanh_thu": 13208925,
+  "bill_offline": 91,
+  "bill_online": 5,
+  "tong_bill": 96,
+  "doanh_thu_khong_vat": true,
+  "nguon": "Doanh Thu Theo Sieu Thi"
+}
