@@ -49,7 +49,7 @@ async function makeReportImages() {
   });
 
   // Đợi JS trong HTML tạo đủ biểu đồ/ngày.
-  await page.waitForTimeout(300);
+  await new Promise(resolve => setTimeout(resolve, 300));
 
   const png = await page.screenshot({
     fullPage: true,
