@@ -1,8 +1,8 @@
 const express=require("express");const crypto=require("crypto");const fs=require("fs");const path=require("path");
 const app=express(),PORT=process.env.PORT||3000,CHANNEL_SECRET=process.env.LINE_CHANNEL_SECRET,ACCESS_TOKEN=process.env.LINE_CHANNEL_ACCESS_TOKEN;
-const REPORT_HTML=path.join(__dirname,"report.html"),DATA_DIR=path.join(__dirname,"data");
+const REPORT_HTML=path.join(__dirname,"report.html"),DATA_FILE=path.join(__dirname,"data","DT_HOM_NAY.json");
 function money(n){return Math.round(n||0).toLocaleString("vi-VN")+" đ"}
-function loadData(){try{const files=fs.readdirSync(DATA_DIR).filter(f=>f.endsWith(".json"));const rows=files.map(f=>JSON.parse(fs.readFileSync(path.join(DATA_DIR,f),"utf8"))).filter(x=>x&&x.ngay);return rows.sort((a,b)=>String(b.ngay).localeCompare(String(a.ngay)))[0]||null}catch(e){console.error("DATA error",e);return null}}
+function loadData(){try{if(!fs.existsSync(DATA_FILE))return null;const d=JSON.parse(fs.readFileSync(DATA_FILE,"utf8"));return d&&d.ngay?d:null}catch(e){console.error("DATA error",e);return null}}
 function latestReportHtml(){let html=fs.readFileSync(REPORT_HTML,"utf8"),d=loadData();if(d){const total=Number(d.doanh_thu_offline||0)+Number(d.doanh_thu_online||0),b=Number(d.tong_bill||0),avg=b?total/b:0;const r=(a,v)=>html=html.split(a).join(v);["19.042.795 đ","13.208.925 đ","13.765.038 đ"].forEach(x=>r(x,money(total)));["13.987.493","8.153.623"].forEach(x=>r(x,Math.round(d.doanh_thu_offline||0).toLocaleString("vi-VN")));r("5.055.302",Math.round(d.doanh_thu_online||0).toLocaleString("vi-VN"));["148","96","97"].forEach(x=>r(x,String(b)));r("128.668 đ",money(avg));}return html}
 async function replyLine(token,messages){const r=await fetch("https://api.line.me/v2/bot/message/reply",{method:"POST",headers:{"Content-Type":"application/json",Authorization:"Bearer "+ACCESS_TOKEN},body:JSON.stringify({replyToken:token,messages})});if(!r.ok)console.error("LINE",r.status,await r.text())}
 app.get("/",(q,s)=>s.send("LINE Bot is running!"));app.get("/report",(q,s)=>s.type("html").send(latestReportHtml()));
