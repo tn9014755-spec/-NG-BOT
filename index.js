@@ -48,7 +48,6 @@ async function makeReportImages() {
     waitUntil: "networkidle0",
   });
 
-  // Đợi JS trong HTML tạo đủ biểu đồ/ngày.
   await new Promise(resolve => setTimeout(resolve, 300));
 
   const png = await page.screenshot({
@@ -58,10 +57,8 @@ async function makeReportImages() {
 
   await page.close();
 
-  // Ảnh gốc: đủ rõ để mở xem toàn bộ báo cáo.
   await sharp(png).jpeg({ quality: 88, mozjpeg: true }).toFile(REPORT_JPG);
 
-  // Ảnh preview nhỏ để LINE tải nhanh.
   await sharp(png)
     .resize({ width: 520, withoutEnlargement: true })
     .jpeg({ quality: 70, mozjpeg: true })
@@ -166,16 +163,16 @@ app.post(
           .trim();
 
         if (text.includes("bc sức khỏe")) {
-          // Tạo ảnh đúng từ HTML full mà anh vừa gửi.
           await makeReportImages();
 
           const original = `${BASE_URL}/report.jpg?v=${Date.now()}`;
           const preview = `${BASE_URL}/report-preview.jpg?v=${Date.now()}`;
+          const reportLink = `${BASE_URL}/report`;
 
           await replyLine(event.replyToken, [
             {
               type: "text",
-              text: "📊 BC SỨC KHỎE\n\nEm gửi anh bản FULL theo đúng mẫu cũ + data cũ đây 👇",
+              text: `📊 BC SỨC KHỎE\n\n💪 Bản mới nhất đã cập nhật.\n🟢 Màu sắc mạnh hơn · chữ/số nổi bật\n💻 HTML: ${reportLink}\n\n@all`,
             },
             {
               type: "image",
@@ -214,7 +211,6 @@ app.listen(PORT, async () => {
   console.log(`Image: ${BASE_URL}/report.jpg`);
   console.log(`Preview: ${BASE_URL}/report-preview.jpg`);
 
-  // Tạo ảnh ngay khi server khởi động để lần test đầu không phải chờ lâu.
   try {
     await makeReportImages();
     console.log("FULL report images created successfully.");
