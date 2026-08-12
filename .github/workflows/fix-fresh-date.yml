@@ -1,0 +1,37 @@
+name: Fix FRESH date range
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: ${{ !contains(github.event.head_commit.message, '[fresh-date-fixed]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch FRESH date filter
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          p=Path('server.js')
+          s=p.read_text(encoding='utf-8')
+          new='''function fresh(rows){const r0=rows[0]||{};const kp=key(r0,['Tên sản phẩm','Tên SP','Sản phẩm'])||fuzzy(r0,/tên sản phẩm|sản phẩm|sku/);const kc=key(r0,['Ngành hàng BHX','Ngành hàng','Nhóm hàng','Nhóm ngành hàng'])||fuzzy(r0,/ngành hàng|nganh hang|nhóm hàng|nhom hang/);const kdate=key(r0,['Ngày','Ngày bán','Ngày xuất','Date'])||fuzzy(r0,/ngày|date/);if(!kdate)return[];const today=vnToday();const start=today.slice(0,8)+'01';const ks=key(r0,['Tổng SL bán','SL bán'])||fuzzy(r0,/tổng.*sl.*b[aá]n|sl.*b[aá]n|số lượng bán/);const km=key(r0,['SL mất mát kiểm kê','SL mất mát','Mất mát'])||fuzzy(r0,/mất mát|mat mat/);const kh=key(r0,['SL hủy tồn','SL hủy','Hủy'])||fuzzy(r0,/hủy|huy/);const kg=key(r0,['% giảm giá','Giá trị giảm giá','Giảm giá'])||fuzzy(r0,/%.*giảm giá|giảm giá|giam gia/);const ko=key(r0,['Nguyên giá','Giá nguyên','DT nguyên giá'])||fuzzy(r0,/nguyên giá|gia nguyen|dt nguyên giá/);const kd=key(r0,['Doanh thu','DT','Giá trị bán'])||fuzzy(r0,/doanh thu|^dt$|giá trị bán/);const ksg=key(r0,['SL bán nguyên giá','SL nguyên giá'])||fuzzy(r0,/sl.*nguyên giá|sl.*nguyen gia/);const ksd=key(r0,['SL bán giảm giá','SL giảm giá'])||fuzzy(r0,/sl.*giảm giá|sl.*giam gia/);const agg={};for(const r of rows){const d=date(r[kdate]);if(!d)continue;const ds=new Date(d.getTime()+7*60*60*1000).toISOString().slice(0,10);if(ds<start||ds>today)continue;const group=freshGroup(r,kp,kc);if(!group)continue;const p=String(kp?r[kp]:'').trim();const id=group+'|'+p;if(!agg[id])agg[id]={group,san_pham:p,sl_ban:0,mat_mat:0,huy:0,doanh_thu:0,nguyen_gia:0,giam_gia:0,sl_nguyen_gia:0,sl_giam_gia:0};agg[id].sl_ban+=num(ks?r[ks]:0);agg[id].mat_mat+=num(km?r[km]:0);agg[id].huy+=num(kh?r[kh]:0);agg[id].doanh_thu+=num(kd?r[kd]:0);agg[id].nguyen_gia+=num(ko?r[ko]:0);agg[id].sl_nguyen_gia+=num(ksg?r[ksg]:0);agg[id].sl_giam_gia+=num(ksd?r[ksd]:0);if(kg){let v=r[kg];if(typeof v==='string')v=v.replace('%','');let n=num(v);if(n>1)n=n/100;agg[id].giam_gia=Math.max(agg[id].giam_gia,n)}}const out=Object.values(agg);for(const x of out){const total=x.sl_nguyen_gia+x.sl_giam_gia;x.nguyen_gia_pct=total?x.sl_nguyen_gia/total*100:0;x.giam_gia_pct=total?x.sl_giam_gia/total*100:x.giam_gia*100}return out}'''
+          pattern=r'function fresh\(rows\)\{.*?\}\nfunction load'
+          ns,n=re.subn(pattern,new+'\nfunction load',s,count=1,flags=re.S)
+          if n!=1:
+              raise SystemExit('fresh function pattern not found')
+          p.write_text(ns,encoding='utf-8')
+          PY
+      - name: Commit fix
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add server.js
+          git diff --cached --quiet && exit 0
+          git commit -m 'Fix FRESH to day 1 through today [fresh-date-fixed]'
+          git push
