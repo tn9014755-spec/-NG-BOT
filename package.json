@@ -1,14 +1,1 @@
-{
-  "name": "ng-bot",
-  "version": "1.0.0",
-  "main": "clean.js",
-  "scripts": {
-    "start": "node clean.js"
-  },
-  "dependencies": {
-    "express": "^5.1.0",
-    "puppeteer": "^25.4.0",
-    "sharp": "^0.35.3",
-    "xlsx": "^0.18.5"
-  }
-}
+{"name":"ng-bot","version":"2.0.0","main":"server.js","scripts":{"start":"node server.js"},"dependencies":{"express":"^5.1.0","puppeteer":"^25.4.0","sharp":"^0.35.3","xlsx":"^0.18.5"}}
