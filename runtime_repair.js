@@ -4,10 +4,15 @@ const DATA=path.join(__dirname,'data');
 const STATE=path.join(DATA,'health_locked.json');
 const SRC=path.join(DATA,'category_detail_567.json');
 const HEALTH=path.join(__dirname,'health.html');
-function num(v){const n=Number(v);return Number.isFinite(n)?n:0}
-function load(p,f){try{return JSON.parse(fs.readFileSync(p,'utf8'))}catch{return f}}
+const log=(...x)=>process.stdout.write(x.join(' ')+'\n');
+const num=v=>{const n=Number(v);return Number.isFinite(n)?n:0};
+function load(p,f){try{return JSON.parse(fs.readFileSync(p,'utf8'))}catch(e){log('RUNTIME_REPAIR READ_FAIL',p,e.message);return f}}
 function repair(){
-  if(!fs.existsSync(SRC)||!fs.existsSync(HEALTH))return;
+  log('RUNTIME_REPAIR START');
+  log('SRC',fs.existsSync(SRC)?'OK':'MISSING',SRC);
+  log('HEALTH',fs.existsSync(HEALTH)?'OK':'MISSING',HEALTH);
+  if(!fs.existsSync(SRC))throw Error('Missing data/category_detail_567.json');
+  if(!fs.existsSync(HEALTH))throw Error('Missing health.html');
   const saved=load(SRC,{}), old=load(STATE,{});
   const comp={};
   for(const m of [5,6,7]){
@@ -22,9 +27,13 @@ function repair(){
   const state={...old,locked:true,months_locked:[5,6,7],catMonth,catComp};
   fs.writeFileSync(STATE,JSON.stringify(state));
   let h=fs.readFileSync(HEALTH,'utf8');
-  h=h.replace(/const catMonth=\s*.*?;const catComp=\s*.*?;const sameCat=/s,`const catMonth=${JSON.stringify(catMonth)};const catComp=${JSON.stringify(catComp)};const sameCat=`);
+  const injected=`const catMonth=${JSON.stringify(catMonth)};const catComp=${JSON.stringify(catComp)};const sameCat=`;
+  const re=/const catMonth=\s*.*?;const catComp=\s*.*?;const sameCat=/s;
+  if(re.test(h)) h=h.replace(re,injected);
+  else log('RUNTIME_REPAIR WARN: catMonth block not found in health.html');
   h=h.replace(/const daysInMonth=31;/g,'const daysInMonth=30;');
   fs.writeFileSync(HEALTH,h);
-  console.log('RUNTIME REPAIR: T5-T7 restored; T8 forecast=30 days');
+  const totals=[5,6,7].map(m=>catMonth[m].reduce((s,x)=>s+num(x.dt),0));
+  log('RUNTIME_REPAIR OK T5=',totals[0],'T6=',totals[1],'T7=',totals[2],'ROWS=',catComp.length,'T8_FORECAST_DAYS=30');
 }
-try{repair()}catch(e){console.error('RUNTIME_REPAIR',e)}
+try{repair()}catch(e){console.error('RUNTIME_REPAIR ERROR',e);process.exitCode=1}
