@@ -74,16 +74,19 @@ global.fetch=async(...args)=>{
     try{
       const payload=JSON.parse(options.body);
       const text=payload?.messages?.find(m=>m?.type==='text')?.text||'';
-      if(/^\s*BC SỨC KHỎE\s*$|^\s*BC SUC KHOE\s*$/i.test(text)){
+      if(/BC SỨC KHỎE|BC SUC KHOE/i.test(text)){
         await global.__renderBCImage();
         await global.__renderFreshImage();
         const base=process.env.RENDER_EXTERNAL_URL||'https://ng-bot-c0im.onrender.com';
         const stamp=Date.now();
         const dtUrl=base+'/bc-image-dt.jpg?t='+stamp;
         const freshUrl=base+'/bc-image-fresh.jpg?t='+stamp;
-        payload.messages=payload.messages.filter(m=>m?.type!=='image');
-        payload.messages.unshift({type:'image',originalContentUrl:dtUrl,previewImageUrl:dtUrl});
-        payload.messages.unshift({type:'image',originalContentUrl:freshUrl,previewImageUrl:freshUrl});
+        const textMessages=payload.messages.filter(m=>m?.type==='text');
+        payload.messages=[
+          {type:'image',originalContentUrl:dtUrl,previewImageUrl:dtUrl},
+          {type:'image',originalContentUrl:freshUrl,previewImageUrl:freshUrl},
+          ...textMessages
+        ];
         options.body=JSON.stringify(payload);
         console.log('LINE_IMAGES_SEND DT='+dtUrl+' FRESH='+freshUrl);
       }
