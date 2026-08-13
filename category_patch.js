@@ -15,3 +15,4 @@ const fg=`function freshGroup(row,kp,kc){const p=String(kp?row[kp]:'').trim();co
 s=s.replace(/function freshGroup\(row,kp,kc\)\{[\s\S]*?\nfunction fresh\(/,fg+'\nfunction fresh(');
 fs.writeFileSync(target,s);
 require('./fresh_patch.js');
+require('./forecast_patch.js');
