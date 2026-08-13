@@ -2,15 +2,12 @@ const fs=require('fs');
 const path=require('path');
 const target=path.join(__dirname,'server.js');
 let s=fs.readFileSync(target,'utf8');
-if(!s.includes('/* CATEGORY_DETAIL_RULES_V1 */')){
-  const old=`const oldCats=old.catMonth||{};const catMonth={};for(const m of [5,6,7])catMonth[m]=Array.isArray(oldCats[m])?oldCats[m]:[];const m8=cats.map(x=>({name:x.name,dt:x[8]||0})).filter(x=>x.dt>0).sort((a,b)=>b.dt-a.dt);const total8=m8.reduce((s,x)=>s+x.dt,0);m8.forEach(x=>x.share=total8?x.dt/total8*100:0);catMonth[8]=m8;`;
-  const fresh=`/* CATEGORY_DETAIL_RULES_V1 */const catMonth={};for(const m of [5,6,7,8]){const arr=cats.map(x=>({name:x.name,dt:x[m]||0})).filter(x=>x.dt!==0||x.name).sort((a,b)=>b.dt-a.dt);const total=arr.reduce((sum,x)=>sum+x.dt,0);arr.forEach(x=>x.share=total?x.dt/total*100:0);catMonth[m]=arr;}`;
-  if(!s.includes(old)) throw new Error('CATEGORY_OLD_BLOCK_NOT_FOUND');
-  s=s.replace(old,fresh);
-  fs.writeFileSync(target,s);
-  console.log('CATEGORY DETAIL PATCH: T5-T7 rebuilt from category source data');
-}
-// Always enforce the user's C.P. exclusion before starting the server.
+// Restore the locked T5-T7 category detail. Only T8 is rebuilt from the newly uploaded category file.
+const bad=`/* CATEGORY_DETAIL_RULES_V1 */const catMonth={};for(const m of [5,6,7,8]){const arr=cats.map(x=>({name:x.name,dt:x[m]||0})).filter(x=>x.dt!==0||x.name).sort((a,b)=>b.dt-a.dt);const total=arr.reduce((sum,x)=>sum+x.dt,0);arr.forEach(x=>x.share=total?x.dt/total*100:0);catMonth[m]=arr;}`;
+const good=`/* CATEGORY_DETAIL_RULES_V2 */const oldCats=old.catMonth||{};const catMonth={};for(const m of [5,6,7])catMonth[m]=Array.isArray(oldCats[m])?oldCats[m]:[];const m8=cats.map(x=>({name:x.name,dt:x[8]||0})).filter(x=>x.dt>0).sort((a,b)=>b.dt-a.dt);const total8=m8.reduce((sum,x)=>sum+x.dt,0);m8.forEach(x=>x.share=total8?x.dt/total8*100:0);catMonth[8]=m8;`;
+if(s.includes(bad)){s=s.replace(bad,good);fs.writeFileSync(target,s);console.log('CATEGORY DETAIL FIX: restore locked T5-T7, refresh T8 only');}
+else if(!s.includes('CATEGORY_DETAIL_RULES_V2')){const old=`const oldCats=old.catMonth||{};const catMonth={};for(const m of [5,6,7])catMonth[m]=Array.isArray(oldCats[m])?oldCats[m]:[];const m8=cats.map(x=>({name:x.name,dt:x[8]||0})).filter(x=>x.dt>0).sort((a,b)=>b.dt-a.dt);const total8=m8.reduce((sum,x)=>sum+x.dt,0);m8.forEach(x=>x.share=total8?x.dt/total8*100:0);catMonth[8]=m8;`;if(s.includes(old))s=s.replace(old,good),fs.writeFileSync(target,s);}
+// Always enforce C.P exclusion in both category and FRESH classification.
 s=fs.readFileSync(target,'utf8');
 const cat=`function categories(rows){const r0=rows[0]||{};const kd=key(r0,['Ngày xuất','Ngày','Date'])||fuzzy(r0,/ngày.*(xuất|xuat)|date/);const kc=key(r0,['Ngành hàng BHX','Ngành hàng'])||fuzzy(r0,/ngành hàng|nganh hang/);const kr=key(r0,['Doanh thu'])||fuzzy(r0,/doanh thu/);const out={};for(const r of rows){const d=kd?date(r[kd]):null;if(!d)continue;const m=d.getMonth()+1;if(m<5||m>8)continue;const n=String(r[kc]||'Chưa phân loại').trim();if(/c\\.p\\b|c\\s*p\\b/i.test(n))continue;if(!out[n])out[n]={name:n,5:0,6:0,7:0,8:0};out[n][m]+=num(r[kr])}return Object.values(out)}`;
 s=s.replace(/function categories\(rows\)\{[\s\S]*?\nfunction freshGroup/,cat+'\nfunction freshGroup');
