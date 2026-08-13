@@ -20,6 +20,18 @@ s=s.replace(/function categories\(rows\)\{[\s\S]*?\nfunction freshGroup/,cat+'\n
 // Fresh only: exclude C.P.
 const fg=`function freshGroup(row,kp,kc){const p=String(kp?row[kp]:'').trim();const c=String(kc?row[kc]:'').trim();if(!p)return null;const all=(c+' '+p).toLowerCase();if(/c\\.p\\b|c\\s*p\\b/.test(all))return null;const cat=c.toLowerCase();if(cat){if(/bia|sữa|sua|nước|nuoc|kem|trứng|trung|bánh|banh|đông lạnh|dong lanh|hàng mát|hang mat|thức uống|thuc uong|đồ uống|do uong|chăm sóc|cham soc|hóa mỹ phẩm|hoa my pham/.test(cat))return null;if(/rau\\s*củ|rau\\s*cu|rau\\s*củ\\s*quả|rau\\s*cu\\s*qua|rau củ quả cl|rau cu qua cl/.test(cat))return'RAU CỦ';if(/thịt|thit/.test(cat))return'THỊT';if(/cá|ca|hải sản|hai san/.test(cat))return'CÁ / THỦY HẢI SẢN';if(/trái cây|trai cay/.test(cat))return'TRÁI CÂY';return null}return null}`;
 s=s.replace(/function freshGroup\(row,kp,kc\)\{[\s\S]*?\nfunction fresh\(/,fg+'\nfunction fresh(');
+
+// BOOT REPAIR: the saved T5-T7 data must be restored even when no new "Nạp dữ liệu" command is sent.
+// This repairs an already-generated health.html/state that still contains zeroes.
+const bootMarker='// T567_BOOT_REPAIR_V1';
+if(!s.includes(bootMarker)){
+  const boot=`
+${bootMarker}
+function restoreSaved567(){try{const saved=JSON.parse(fs.readFileSync(path.join(DATA,'category_detail_567.json'),'utf8'));const old=load();const names={};for(const m of [5,6,7]){for(const [name,val] of Object.entries(saved[String(m)]||{})){if(!names[name])names[name]={name,5:0,6:0,7:0,8:0};names[name][m]=num(val)}}const catComp=Object.values(names);const catMonth={...(old.catMonth||{})};for(const m of [5,6,7])catMonth[m]=Object.entries(saved[String(m)]||{}).map(([name,val])=>({name,dt:num(val)}));const state={...old,locked:true,months_locked:[5,6,7],catMonth,catComp};save(state);updatePage(state)}catch(e){console.error('T567_BOOT_REPAIR',e)}}
+restoreSaved567();
+`;
+  s=s.replace('async function reply',boot+'async function reply');
+}
 fs.writeFileSync(target,s);
 require('./fresh_patch.js');
 require('./forecast_patch.js');
