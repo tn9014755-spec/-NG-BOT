@@ -32,12 +32,12 @@ function repair(){
   if(re.test(h)) h=h.replace(re,injected);
   else log('RUNTIME_REPAIR WARN: catMonth block not found in health.html');
   h=h.replace(/const daysInMonth=31;/g,'const daysInMonth=30;');
-  const oldForecast=/const daysInMonth=30;const forecast=day>0\?t8\.dt\/day\*daysInMonth:t8\.dt;/;
-  const newForecast='const daysInMonth=30;const maxDailyDT=daily.length?Math.max(...daily.map(x=>(+x.offline||0)+(+x.online||0))):0;const forecast=maxDailyDT>0?maxDailyDT*30:t8.dt;';
+  const oldForecast=/const daysInMonth=30;const maxDailyDT=daily.length\?Math\.max\(\.\.\.daily\.map\(x=>\(\+x\.offline\|\|0\)\+\(\+x\.online\|\|0\)\)\):0;const forecast=maxDailyDT>0\?maxDailyDT\*30:t8\.dt;/;
+  const newForecast='const daysInMonth=30;const totalDT=daily.reduce((s,x)=>s+(+x.offline||0)+(+x.online||0),0);const daysWithDT=daily.length;const forecast=daysWithDT>0?totalDT/daysWithDT*30:t8.dt;';
   if(oldForecast.test(h)) h=h.replace(oldForecast,newForecast);
   else log('RUNTIME_REPAIR WARN: forecast formula block not found in health.html');
   fs.writeFileSync(HEALTH,h);
   const totals=[5,6,7].map(m=>catMonth[m].reduce((s,x)=>s+num(x.dt),0));
-  log('RUNTIME_REPAIR OK T5=',totals[0],'T6=',totals[1],'T7=',totals[2],'ROWS=',catComp.length,'T8_FORECAST=MAX_DAILY_DT*30');
+  log('RUNTIME_REPAIR OK T5=',totals[0],'T6=',totals[1],'T7=',totals[2],'ROWS=',catComp.length,'T8_FORECAST=TOTAL_DT/DAYS*30');
 }
 try{repair()}catch(e){console.error('RUNTIME_REPAIR ERROR',e);process.exitCode=1}
