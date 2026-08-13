@@ -5,7 +5,12 @@ let s=fs.readFileSync(target,'utf8');
 // T5-T7: use the saved source data/category_detail_567.json. T8: rebuild from current category file.
 const oldState=`const state={...old,locked:true,months_locked:[5,6,7],monthly, daily,catMonth,catComp:cats,fresh:freshData`;
 const newState=`const saved567=JSON.parse(fs.readFileSync(path.join(DATA,'category_detail_567.json'),'utf8'));const compMap={};for(const m of [5,6,7]){for(const [name,val] of Object.entries(saved567[String(m)]||{})){if(!compMap[name])compMap[name]={name,5:0,6:0,7:0,8:0};compMap[name][m]=num(val)}}for(const x of cats){if(!x||!x.name)continue;if(!compMap[x.name])compMap[x.name]={name:x.name,5:0,6:0,7:0,8:0};compMap[x.name][8]=x[8]||0}const catComp=Object.values(compMap);const state={...old,locked:true,months_locked:[5,6,7],monthly, daily,catMonth,catComp,fresh:freshData`;
-if(s.includes(oldState)){s=s.replace(oldState,newState);fs.writeFileSync(target,s);}
+if(s.includes(oldState)){s=s.replace(oldState,newState);}
+// Also fix the actual ingestHealth() state writer. Without this, every fresh ingest would overwrite T5-T7 with the old zero values.
+const oldIngest=`const cats=categories(catFile.rows);const oldCats=old.catMonth||{};`;
+const newIngest=`const cats=categories(catFile.rows);const saved567=JSON.parse(fs.readFileSync(path.join(DATA,'category_detail_567.json'),'utf8'));const compMap={};for(const m of [5,6,7]){for(const [name,val] of Object.entries(saved567[String(m)]||{})){if(!compMap[name])compMap[name]={name,5:0,6:0,7:0,8:0};compMap[name][m]=num(val)}}for(const x of cats){if(!x||!x.name)continue;if(!compMap[x.name])compMap[x.name]={name:x.name,5:0,6:0,7:0,8:0};compMap[x.name][8]=x[8]||0}const catComp567=Object.values(compMap);const oldCats=old.catMonth||{};`;
+if(s.includes(oldIngest))s=s.replace(oldIngest,newIngest);
+s=s.replace(`catMonth,catComp:cats,fresh:freshData`,`catMonth,catComp:catComp567,fresh:freshData`);
 // General category data: DO NOT remove C.P. here. C.P. is excluded only from FRESH.
 const cat=`function categories(rows){const r0=rows[0]||{};const kd=key(r0,['Ngày xuất','Ngày','Date'])||fuzzy(r0,/ngày.*(xuất|xuat)|date/);const kc=key(r0,['Ngành hàng BHX','Ngành hàng'])||fuzzy(r0,/ngành hàng|nganh hang/);const kr=key(r0,['Doanh thu'])||fuzzy(r0,/doanh thu/);const out={};for(const r of rows){const d=kd?date(r[kd]):null;if(!d)continue;const m=d.getMonth()+1;if(m<5||m>8)continue;const n=String(r[kc]||'Chưa phân loại').trim();if(!out[n])out[n]={name:n,5:0,6:0,7:0,8:0};out[n][m]+=num(r[kr])}return Object.values(out)}`;
 s=s.replace(/function categories\(rows\)\{[\s\S]*?\nfunction freshGroup/,cat+'\nfunction freshGroup');
