@@ -8,7 +8,7 @@ if(start<0||end<0)throw Error('Không tìm thấy freshSection');
 const fn=`function freshSection(rows){
   const data=Array.isArray(rows)?rows:[];
   const groups=[['RAU CỦ','🥬'],['THỊT','🥩'],['CÁ / THỦY HẢI SẢN','🐟'],['TRÁI CÂY','🍎']];
-  const isCP=x=>/c\\.p\\b|\\bc\\s*p\\b/i.test(String(x?.san_pham||''));
+  const isCP=x=>{const p=String(x?.san_pham??x?.product??x?.['Tên sản phẩm']??'').normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').toLowerCase();const compact=p.replace(/[^a-z0-9]/g,'');return /(^|[^a-z])c\\.?\\s*p\\.?([^a-z]|$)/i.test(p)||/(^|[^a-z])cp([^a-z]|$)/i.test(p)||compact.includes('cp');};
   const renderGroup=(g,icon)=>{
     const a=data.filter(x=>x.group===g);
     const total=a.reduce((s,x)=>s+x.doanh_thu,0);
