@@ -1,0 +1,10 @@
+const fs=require('fs');
+const path=require('path');
+const f=path.join(__dirname,'health.html');
+let h=fs.readFileSync(f,'utf8');
+h=h.replace('max-width:1250px','max-width:1100px').replace('min-width:700px','min-width:560px').replace('padding:9px 7px','padding:6px 5px').replace('font-size:12px;text-align:right','font-size:11px;text-align:right');
+h=h.replace('width:29%}th{','width:24%}th{').replace('width:14.2%}td:not(:first-child)','width:15.2%}td:not(:first-child)');
+h=h.replace('width:32%}.detail table th:nth-child(2)','width:27%}.detail table th:nth-child(2)').replace('width:13.5%}.detail table th:last-child','width:14%}.detail table th:last-child');
+h=h.replace('const VND=n=>new Intl.NumberFormat("vi-VN").format(Math.round(n||0))+" đ"','const R4=n=>Math.round(Number(n||0)/10000)*10000;const VND=n=>new Intl.NumberFormat("vi-VN").format(R4(n))+" đ"');
+fs.writeFileSync(f,h);
+console.log('UI PATCH: compact columns + round revenue to nearest 10,000');
