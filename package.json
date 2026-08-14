@@ -1,1 +1,1 @@
-{"name":"ng-bot","version":"3.1.0","main":"server.js","scripts":{"start":"node server.js"},"dependencies":{"express":"^5.1.0","xlsx":"^0.18.5"}}
+{"name":"ng-bot","version":"3.2.0","main":"index.js","scripts":{"start":"node index.js"},"dependencies":{"express":"^5.1.0","xlsx":"^0.18.5","puppeteer":"^24.16.0"}}
