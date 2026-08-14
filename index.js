@@ -1,3 +1,2 @@
-// BC NGÀY entrypoint: Render's existing Start Command runs index.js.
-// Route it to the new BC NGÀY webhook server so the existing LINE bot uses the new job.
-require('./server.js');
+// BC NGAY entrypoint for the existing Render service.
+require('./bc_server.js');
