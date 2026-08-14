@@ -14,7 +14,8 @@ app.get('/health', (_req, res) => res.status(200).json({ ok: true, bot: 'BC_NGAY
 function verify(body, signature) {
   if (!LINE_SECRET) return true;
   const expected = crypto.createHmac('sha256', LINE_SECRET).update(body).digest('base64');
-  return crypto.timingSafeEqual(Buffer.from(signature || ''), Buffer.from(expected));
+  if (!signature || signature.length !== expected.length) return false;
+  return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
 }
 async function lineFetch(url, options = {}) {
   return fetch(url, { ...options, headers: { Authorization: `Bearer ${LINE_TOKEN}`, ...(options.headers || {}) } });
