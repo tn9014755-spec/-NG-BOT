@@ -17,6 +17,13 @@ src = src.replace(/process\.env\.PUBLIC_BASE_URL/g, "globalThis.process?.env?.PU
 src = src.replace("for(const ws of wb.Sheets)", "for(const ws of Object.values(wb.Sheets || {}))");
 src = src.replace("for (const ws of wb.Sheets)", "for (const ws of Object.values(wb.Sheets || {}))");
 
+// Keep the LINE destination in scope for the file-processing catch block.
+src = src.replace("const m=e.message||{};", "const m=e.message||{};let to=e.source?.userId||e.source?.groupId||e.source?.roomId;");
+src = src.replace("const to=e.source?.userId||e.source?.groupId||e.source?.roomId;", "to=e.source?.userId||e.source?.groupId||e.source?.roomId;");
+
+// Puppeteer on Render must use the browser installed in the configured cache.
+src = src.replace("executablePath:globalThis.process.env.PUPPETEER_EXECUTABLE_PATH||undefined", "executablePath:globalThis.process.env.PUPPETEER_EXECUTABLE_PATH||p.executablePath()");
+
 const runtime = new Module(path.join(__dirname, 'bc_fresh_runtime_compiled.js'), module);
 runtime.filename = path.join(__dirname, 'bc_fresh_runtime_compiled.js');
 runtime.paths = module.paths;
