@@ -1,32 +1,28 @@
 // Runtime compatibility wrapper for BC FRESH.
-// Fixes the generated BC FRESH module before Node compiles it.
+// Repairs the generated module before Node compiles it and keeps BC NGAY routing intact.
 const fs=require('fs');
 const path=require('path');
 const Module=require('module');
 const sourceFile=path.join(__dirname,'bc_fresh_bot.js');
 let src=fs.readFileSync(sourceFile,'utf8');
 
-// Fix the malformed fetch() line in the generated module.
-src=src.replace(
-  "return fetch(u,{...o,headers:{Authorization:'Bearer '+TOKEN,...(o.headers||{})})}",
-  "return fetch(u,{...o,headers:{Authorization:'Bearer '+TOKEN,...(o.headers||{})}}) }"
-);
+// The generated module had a missing closing brace in the fetch() headers object.
+// Repair the complete function declaration by regex so minor formatting changes do not break the patch.
+src=src.replace(/async function line\(u,o=\{\}\)\{[\s\S]*?\}async function reply/, "async function line(u,o={}){return fetch(u,{...o,headers:{Authorization:'Bearer '+TOKEN,...(o.headers||{})}})}async function reply");
 
-// Keep BC NGAY's normal file flow intact. BC FRESH is selected only by an explicit
-// BC FRESH command; do not let the FRESH handler consume every Excel file.
+// BC FRESH is selected only after the user explicitly sends BC FRESH.
 src=src.replace(
   "if(m.type==='file'&&/\\.(xlsx|xls|csv)$/i.test(String(m.fileName||'')))",
   "if(m.type==='file'&&/\\.(xlsx|xls|csv)$/i.test(String(m.fileName||''))&&global.__BC_FRESH_WAITING===true)"
 );
 
-// When BC FRESH is explicitly requested, allow the next Excel upload to be routed
-// to FRESH. The command itself still returns the saved BC FRESH image when available.
+// Explicit command arms the next Excel upload for BC FRESH.
 src=src.replace(
   "if(m.type==='text'&&/^BC\\s+FRESH$/i.test(String(m.text||'').trim())){used=true;",
   "if(m.type==='text'&&/^BC\\s+FRESH$/i.test(String(m.text||'').trim())){used=true;global.__BC_FRESH_WAITING=true;"
 );
 
-// Once a Fresh Excel is consumed, return the router to normal BC NGAY mode.
+// After consuming a Fresh Excel, return to normal BC NGAY mode.
 src=src.replace(
   "const im=await process(Buffer.from(await r.arrayBuffer()),m.fileName);await reply(e.replyToken,{type:'image',originalContentUrl:im.full,previewImageUrl:im.preview})",
   "const im=await process(Buffer.from(await r.arrayBuffer()),m.fileName);global.__BC_FRESH_WAITING=false;await reply(e.replyToken,{type:'image',originalContentUrl:im.full,previewImageUrl:im.preview})"
