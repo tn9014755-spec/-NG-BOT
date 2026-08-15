@@ -1,10 +1,16 @@
 // BC FRESH runtime wrapper.
-// Exact workflow: user sends BC FRESH, then the NEXT Excel file is routed to FRESH.
+// BC FRESH = arm command first, then the NEXT Excel/CSV file is routed to FRESH.
 const fs=require('fs');
 const path=require('path');
 const Module=require('module');
 const sourceFile=path.join(__dirname,'bc_fresh_bot.js');
 let src=fs.readFileSync(sourceFile,'utf8');
+
+// Always make environment access safe inside the compiled runtime.
+src=src.replace(/process\.env\.LINE_CHANNEL_ACCESS_TOKEN/g,"globalThis.process?.env?.LINE_CHANNEL_ACCESS_TOKEN");
+src=src.replace(/process\.env\.LINE_ACCESS_TOKEN/g,"globalThis.process?.env?.LINE_ACCESS_TOKEN");
+src=src.replace(/process\.env\.RENDER_EXTERNAL_URL/g,"globalThis.process?.env?.RENDER_EXTERNAL_URL");
+src=src.replace(/process\.env\.PUBLIC_BASE_URL/g,"globalThis.process?.env?.PUBLIC_BASE_URL");
 
 // Keep the LINE request helper compatible with Node's global process object.
 src=src.replace(/async function line\(u,o=\{\}\)\{[\s\S]*?\}async function reply/,
@@ -16,7 +22,7 @@ src=src.replace(
   "return op.call(this,route,fresh,...handlers)"
 );
 
-// BC FRESH is an ARM command only. Do NOT immediately resend an old/stale FRESH image.
+// BC FRESH is an ARM command only. Do not resend an old/stale image on the command.
 src=src.replace(
   "if(m.type==='text'&&/^BC\\s+FRESH$/i.test(String(m.text||'').trim())){used=true;",
   "if(m.type==='text'&&/^BC\\s+FRESH$/i.test(String(m.text||'').trim())){used=true;globalThis.__BC_FRESH_WAITING=true;await reply(e.replyToken,{type:'text',text:'✅ Đã nhận lệnh BC FRESH.\\n📎 Anh gửi FILE EXCEL tiếp theo, em sẽ làm BC FRESH bằng HÌNH ẢNH.'});"
@@ -38,7 +44,7 @@ src=src.replace(
   "const im=await process(Buffer.from(await r.arrayBuffer()),m.fileName);globalThis.__BC_FRESH_WAITING=false;await reply(e.replyToken,{type:'image',originalContentUrl:im.full,previewImageUrl:im.preview})"
 );
 
-// If FRESH processing fails, reset the armed state and send a visible error to LINE.
+// If FRESH processing fails, reset the armed state and report the error visibly.
 src=src.replace(
   "}catch(err){console.error('BC FRESH ERROR',err);if(!res.headersSent)res.status(200).send('OK')}",
   "}catch(err){globalThis.__BC_FRESH_WAITING=false;console.error('BC FRESH ERROR',err);for(const e of (p&&p.events||[])){if(e.replyToken)await reply(e.replyToken,{type:'text',text:'❌ BC FRESH lỗi: '+String(err.message||err).slice(0,180)})}if(!res.headersSent)res.status(200).send('OK')}"
