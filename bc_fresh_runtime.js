@@ -28,7 +28,7 @@ src = src.replace("const m=e.message||{};", "const m=e.message||{};let to=e.sour
 src = src.replace("const to=e.source?.userId||e.source?.groupId||e.source?.roomId;", "to=e.source?.userId||e.source?.groupId||e.source?.roomId;");
 
 // Puppeteer on Render uses the browser from the same project-local cache.
-src = src.replace("executablePath:globalThis.process.env.PUPPETEER_EXECUTABLE_PATH||undefined", "executablePath:globalThis.process.env.PUPPETEER_EXECUTABLE_PATH||p.executablePath()");
+src = src.replace("executablePath:globalThis.process.env.PUPPETEER_EXECUTABLE_PATH||undefined", "executablePath:p.executablePath()");
 
 const runtime = new Module(path.join(__dirname, 'bc_fresh_runtime_compiled.js'), module);
 runtime.filename = path.join(__dirname, 'bc_fresh_runtime_compiled.js');
