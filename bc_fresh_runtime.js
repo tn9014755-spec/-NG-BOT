@@ -27,6 +27,9 @@ src = src.replace("for (const ws of wb.Sheets)", "for (const ws of Object.values
 src = src.replace("const m=e.message||{};", "const m=e.message||{};let to=e.source?.userId||e.source?.groupId||e.source?.roomId;");
 src = src.replace("const to=e.source?.userId||e.source?.groupId||e.source?.roomId;", "to=e.source?.userId||e.source?.groupId||e.source?.roomId;");
 
+// Add FRESH command: resend the latest saved BC FRESH image without requiring a new Excel file.
+src = src.replace("if(m.type==='text'&&/^BC\\s+FRESH$/i.test(String(m.text||'').trim())){", "if(m.type==='text'&&/^FRESH$/i.test(String(m.text||'').trim())){used=true;globalThis.__BC_FRESH_WAITING=false;if(fs.existsSync(IMG)){if(e.replyToken)await reply(e.replyToken,{type:'text',text:'📊 Đang gửi lại BC FRESH gần nhất...'});if(to)await pushMessage(to,{type:'image',originalContentUrl:BASE+'/bc-fresh.png?'+Date.now(),previewImageUrl:BASE+'/bc-fresh-preview.png?'+Date.now()})}else if(e.replyToken)await reply(e.replyToken,{type:'text',text:'⚠️ Chưa có BC FRESH nào được lưu. Anh gửi BC FRESH + FILE EXCEL trước nhé.'})}else if(m.type==='text'&&/^BC\\s+FRESH$/i.test(String(m.text||'').trim())){");
+
 // Puppeteer on Render uses the browser from the same project-local cache.
 src = src.replace("executablePath:globalThis.process.env.PUPPETEER_EXECUTABLE_PATH||undefined", "executablePath:p.executablePath()");
 
