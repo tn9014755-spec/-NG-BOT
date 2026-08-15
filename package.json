@@ -1,1 +1,1 @@
-{"name":"ng-bot","version":"3.2.0","main":"index.js","scripts":{"start":"node index.js"},"dependencies":{"express":"^5.1.0","xlsx":"^0.18.5","puppeteer":"^24.16.0"}}
+{"name":"ng-bot","version":"3.2.1","main":"index.js","scripts":{"start":"node index.js","postinstall":"PUPPETEER_CACHE_DIR=${PUPPETEER_CACHE_DIR:-.cache/puppeteer} npx puppeteer browsers install chrome"},"dependencies":{"express":"^5.1.0","xlsx":"^0.18.5","puppeteer":"^24.16.0"}}
