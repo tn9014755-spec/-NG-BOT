@@ -30,7 +30,11 @@ src = src.replace("const to=e.source?.userId||e.source?.groupId||e.source?.roomI
 // Add FRESH command: resend the latest saved BC FRESH image without requiring a new Excel file.
 src = src.replace("if(m.type==='text'&&/^BC\\s+FRESH$/i.test(String(m.text||'').trim())){", "if(m.type==='text'&&/^FRESH$/i.test(String(m.text||'').trim())){used=true;globalThis.__BC_FRESH_WAITING=false;if(fs.existsSync(IMG)){if(e.replyToken)await reply(e.replyToken,{type:'text',text:'📊 Đang gửi lại BC FRESH gần nhất...'});if(to)await pushMessage(to,{type:'image',originalContentUrl:BASE+'/bc-fresh.png?'+Date.now(),previewImageUrl:BASE+'/bc-fresh-preview.png?'+Date.now()})}else if(e.replyToken)await reply(e.replyToken,{type:'text',text:'⚠️ Chưa có BC FRESH nào được lưu. Anh gửi BC FRESH + FILE EXCEL trước nhé.'})}else if(m.type==='text'&&/^BC\\s+FRESH$/i.test(String(m.text||'').trim())){");
 
-// Puppeteer on Render uses the browser from the same project-local cache.
+// @sparticuz/chromium v149 is ESM-first; require() returns a namespace with
+// the Chromium object under .default in CommonJS runtime.
+src = src.replace("const chromium=require('@sparticuz/chromium');", "const chromium=(require('@sparticuz/chromium').default||require('@sparticuz/chromium'));");
+
+// Puppeteer on Render uses the browser from the same project-local cache when available.
 src = src.replace("executablePath:globalThis.process.env.PUPPETEER_EXECUTABLE_PATH||undefined", "executablePath:p.executablePath()");
 
 const runtime = new Module(path.join(__dirname, 'bc_fresh_runtime_compiled.js'), module);
