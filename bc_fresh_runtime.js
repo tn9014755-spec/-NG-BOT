@@ -1,54 +1,41 @@
 // BC FRESH runtime wrapper.
-// BC FRESH = arm command first, then the NEXT Excel/CSV file is routed to FRESH.
+// Fixes: reply immediately before long Excel/Puppeteer work, use push message for final image,
+// and normalize XLSX Sheets because wb.Sheets is an object, not an iterable.
 const fs=require('fs');
 const path=require('path');
 const Module=require('module');
 const sourceFile=path.join(__dirname,'bc_fresh_bot.js');
 let src=fs.readFileSync(sourceFile,'utf8');
 
-// Always make environment access safe inside the compiled runtime.
 src=src.replace(/process\.env\.LINE_CHANNEL_ACCESS_TOKEN/g,"globalThis.process?.env?.LINE_CHANNEL_ACCESS_TOKEN");
 src=src.replace(/process\.env\.LINE_ACCESS_TOKEN/g,"globalThis.process?.env?.LINE_ACCESS_TOKEN");
 src=src.replace(/process\.env\.RENDER_EXTERNAL_URL/g,"globalThis.process?.env?.RENDER_EXTERNAL_URL");
 src=src.replace(/process\.env\.PUBLIC_BASE_URL/g,"globalThis.process?.env?.PUBLIC_BASE_URL");
 
-// Keep the LINE request helper compatible with Node's global process object.
-src=src.replace(/async function line\(u,o=\{\}\)\{[\s\S]*?\}async function reply/,
-  "async function line(u,o={}){return fetch(u,{...o,headers:{Authorization:'Bearer '+TOKEN,...(o.headers||{})}})}async function reply");
+// Keep LINE helper safe and add pushMessage for results produced after the reply token expires.
+src=src.replace(/async function line\(u,o=\{\}\)\{[\s\S]*?\}async function reply\(t,m\)\{[\s\S]*?\}\nconst val/,
+"async function line(u,o={}){return fetch(u,{...o,headers:{Authorization:'Bearer '+TOKEN,...(o.headers||{})}})}async function reply(t,m){if(!TOKEN||!t)return;const a=Array.isArray(m)?m:[m],r=await line(API+'/message/reply',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({replyToken:t,messages:a.slice(0,5)})});if(!r.ok)console.error('BC FRESH REPLY',r.status,await r.text())}async function pushMessage(to,m){if(!TOKEN||!to)return;const a=Array.isArray(m)?m:[m],r=await line(API+'/message/push',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to,messages:a.slice(0,5)})});if(!r.ok)console.error('BC FRESH PUSH',r.status,await r.text())}
+const val");
 
-// Register FRESH before the legacy BC NGAY webhook.
-src=src.replace(
-  "return op.call(this,route,handlers[0],fresh,...handlers.slice(1))",
-  "return op.call(this,route,fresh,...handlers)"
-);
+// SheetJS exposes workbook.Sheets as an object keyed by sheet name.
+src=src.replace("for(const ws of wb.Sheets)","for(const ws of Object.values(wb.Sheets||{}))");
 
-// BC FRESH is an ARM command only. Do not resend an old/stale image on the command.
+// Register FRESH before legacy BC NGAY.
+src=src.replace("return op.call(this,route,handlers[0],fresh,...handlers.slice(1))","return op.call(this,route,fresh,...handlers)");
+
+// BC FRESH command is an ARM command only.
 src=src.replace(
-  "if(m.type==='text'&&/^BC\\s+FRESH$/i.test(String(m.text||'').trim())){used=true;",
-  "if(m.type==='text'&&/^BC\\s+FRESH$/i.test(String(m.text||'').trim())){used=true;globalThis.__BC_FRESH_WAITING=true;await reply(e.replyToken,{type:'text',text:'✅ Đã nhận lệnh BC FRESH.\\n📎 Anh gửi FILE EXCEL tiếp theo, em sẽ làm BC FRESH bằng HÌNH ẢNH.'});"
+"if(m.type==='text'&&/^BC\\s+FRESH$/i.test(String(m.text||'').trim())){used=true;if(fs.existsSync(IMG)){await reply(e.replyToken,{type:'image',originalContentUrl:BASE+'/bc-fresh.png?'+Date.now(),previewImageUrl:BASE+'/bc-fresh-preview.png?'+Date.now()})}else if(fs.existsSync(XLS)){const im=await process(fs.readFileSync(XLS),((()=>{try{return JSON.parse(fs.readFileSync(META,'utf8')).fileName}catch{return'Excel cũ'}})()));await reply(e.replyToken,{type:'image',originalContentUrl:im.full,previewImageUrl:im.preview})}else await reply(e.replyToken,{type:'text',text:'📭 Chưa có file BC FRESH.'})}",
+"if(m.type==='text'&&/^BC\\s+FRESH$/i.test(String(m.text||'').trim())){used=true;globalThis.__BC_FRESH_WAITING=true;await reply(e.replyToken,{type:'text',text:'✅ Đã nhận lệnh BC FRESH.\\n📎 Anh gửi FILE EXCEL tiếp theo, em sẽ làm BC FRESH bằng HÌNH ẢNH.'})}"
 );
 
 // Only the next Excel/CSV upload after BC FRESH is armed belongs to FRESH.
-src=src.replace(
-  "if(m.type==='file'&&/\\.(xlsx|xls|csv)$/i.test(String(m.fileName||'')))",
-  "if(m.type==='file'&&/\\.(xlsx|xls|csv)$/i.test(String(m.fileName||''))&&globalThis.__BC_FRESH_WAITING===true)"
-);
-src=src.replace(
-  "else if(m.type==='file'&&/\\.(xlsx|xls|csv)$/i.test(String(m.fileName||'')))",
-  "else if(m.type==='file'&&/\\.(xlsx|xls|csv)$/i.test(String(m.fileName||''))&&globalThis.__BC_FRESH_WAITING===true)"
+src=src.replace("if(m.type==='file'&&/\\.(xlsx|xls|csv)$/i.test(String(m.fileName||''))){used=true;const r=await line(DATA_API+'/message/'+encodeURIComponent(m.id)+'/content');if(!r.ok)throw Error('LINE tải file lỗi '+r.status);const im=await process(Buffer.from(await r.arrayBuffer()),m.fileName);await reply(e.replyToken,{type:'image',originalContentUrl:im.full,previewImageUrl:im.preview})}",
+"if(m.type==='file'&&/\\.(xlsx|xls|csv)$/i.test(String(m.fileName||''))&&globalThis.__BC_FRESH_WAITING===true){used=true;const to=e.source?.userId||e.source?.groupId||e.source?.roomId;await reply(e.replyToken,{type:'text',text:'⏳ Đã nhận file Excel. Em đang xử lý BC FRESH, chờ em một chút...'});try{const r=await line(DATA_API+'/message/'+encodeURIComponent(m.id)+'/content');if(!r.ok)throw Error('LINE tải file lỗi '+r.status);const im=await process(Buffer.from(await r.arrayBuffer()),m.fileName);globalThis.__BC_FRESH_WAITING=false;await pushMessage(to,{type:'image',originalContentUrl:im.full+'?'+Date.now(),previewImageUrl:im.preview+'?'+Date.now()})}catch(err){globalThis.__BC_FRESH_WAITING=false;console.error('BC FRESH PROCESS',err);await pushMessage(to,{type:'text',text:'❌ BC FRESH lỗi: '+String(err.message||err).slice(0,180)})}}"
 );
 
-// Return to normal BC NGAY routing after the FRESH file has been rendered.
-src=src.replace(
-  "const im=await process(Buffer.from(await r.arrayBuffer()),m.fileName);await reply(e.replyToken,{type:'image',originalContentUrl:im.full,previewImageUrl:im.preview})",
-  "const im=await process(Buffer.from(await r.arrayBuffer()),m.fileName);globalThis.__BC_FRESH_WAITING=false;await reply(e.replyToken,{type:'image',originalContentUrl:im.full,previewImageUrl:im.preview})"
-);
-
-// If FRESH processing fails, reset the armed state and report the error visibly.
-src=src.replace(
-  "}catch(err){console.error('BC FRESH ERROR',err);if(!res.headersSent)res.status(200).send('OK')}",
-  "}catch(err){globalThis.__BC_FRESH_WAITING=false;console.error('BC FRESH ERROR',err);for(const e of (p&&p.events||[])){if(e.replyToken)await reply(e.replyToken,{type:'text',text:'❌ BC FRESH lỗi: '+String(err.message||err).slice(0,180)})}if(!res.headersSent)res.status(200).send('OK')}"
-);
+// Prevent the outer catch from trying to reuse an expired reply token.
+src=src.replace("}catch(err){console.error('BC FRESH ERROR',err);if(!res.headersSent)res.status(200).send('OK')}","}catch(err){globalThis.__BC_FRESH_WAITING=false;console.error('BC FRESH ERROR',err);if(!res.headersSent)res.status(200).send('OK')}");
 
 const runtime=new Module(path.join(__dirname,'bc_fresh_runtime_compiled.js'),module);
 runtime.filename=path.join(__dirname,'bc_fresh_runtime_compiled.js');
