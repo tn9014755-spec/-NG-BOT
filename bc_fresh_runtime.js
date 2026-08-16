@@ -15,19 +15,18 @@ function loadFreshTarget(){try{return JSON.parse(fs.readFileSync(TARGET_FILE,'ut
 function saveFreshTarget(to){if(!to)return;try{fs.writeFileSync(TARGET_FILE,JSON.stringify({to,updatedAt:new Date().toISOString()}))}catch(e){console.error('BC FRESH TARGET SAVE',e)}}
 
 let src = fs.readFileSync(sourceFile, 'utf8');
-src = src.replace(/process\.env\.LINE_CHANNEL_ACCESS_TOKEN/g, "globalThis.process?.env?.LINE_CHANNEL_ACCESS_TOKEN");
-src = src.replace(/process\.env\.LINE_ACCESS_TOKEN/g, "globalThis.process?.env?.LINE_ACCESS_TOKEN");
-src = src.replace(/process\.env\.RENDER_EXTERNAL_URL/g, "globalThis.process?.env?.RENDER_EXTERNAL_URL");
-src = src.replace(/process\.env\.PUBLIC_BASE_URL/g, "globalThis.process?.env?.PUBLIC_BASE_URL");
+src = src.replace(/process\\.env\\.LINE_CHANNEL_ACCESS_TOKEN/g, "globalThis.process?.env?.LINE_CHANNEL_ACCESS_TOKEN");
+src = src.replace(/process\\.env\\.LINE_ACCESS_TOKEN/g, "globalThis.process?.env?.LINE_ACCESS_TOKEN");
+src = src.replace(/process\\.env\\.RENDER_EXTERNAL_URL/g, "globalThis.process?.env?.RENDER_EXTERNAL_URL");
+src = src.replace(/process\\.env\\.PUBLIC_BASE_URL/g, "globalThis.process?.env?.PUBLIC_BASE_URL");
 src = src.replace("for(const ws of wb.Sheets)", "for(const ws of Object.values(wb.Sheets || {}))");
 src = src.replace("for (const ws of wb.Sheets)", "for (const ws of Object.values(wb.Sheets || {}))");
 
 // Keep destination in scope.
 src = src.replace("const m=e.message||{};", "const m=e.message||{};let to=e.source?.userId||e.source?.groupId||e.source?.roomId;");
 
-// FRESH always replies in the chat where the command was typed.
-// If the PNG was lost after restart, rebuild it from latest.html.
-src = src.replace("const m=e.message||{};let to=e.source?.userId||e.source?.groupId||e.source?.roomId;", "const m=e.message||{};let to=e.source?.userId||e.source?.groupId||e.source?.roomId;if(m.type==='text'&&/^FRESH$/i.test(String(m.text||'').trim())){used=true;globalThis.__BC_FRESH_WAITING=false;try{let im=null;if(fs.existsSync(IMG)){im={full:BASE+'/bc-fresh.png',preview:BASE+'/bc-fresh-preview.png'}}else if(fs.existsSync(HTML)){im=await render(fs.readFileSync(HTML,'utf8'))}if(im&&e.replyToken){await reply(e.replyToken,{type:'image',originalContentUrl:im.full+'?'+Date.now(),previewImageUrl:im.preview+'?'+Date.now()})}else if(e.replyToken){await reply(e.replyToken,{type:'text',text:'⚠️ Chưa có BC FRESH gần nhất để gửi lại.'})}}catch(err){console.error('BC FRESH RESEND',err);if(e.replyToken)await reply(e.replyToken,{type:'text',text:'❌ Không thể gửi lại BC FRESH: '+String(err.message||err).slice(0,160)})}continue;}");
+// FRESH = reprocess the last saved Excel file, rebuild the FULL image, and reply in the same private chat.
+src = src.replace("const m=e.message||{};let to=e.source?.userId||e.source?.groupId||e.source?.roomId;", "const m=e.message||{};let to=e.source?.userId||e.source?.groupId||e.source?.roomId;if(m.type==='text'&&/^FRESH$/i.test(String(m.text||'').trim())){used=true;globalThis.__BC_FRESH_WAITING=false;try{let im=null;if(fs.existsSync(XLS)&&typeof globalThis.__BC_FRESH_PROCESS==='function'){let meta={};try{meta=JSON.parse(fs.readFileSync(META,'utf8'))}catch(_e){}im=await globalThis.__BC_FRESH_PROCESS(fs.readFileSync(XLS),meta.fileName||'latest.xlsx')}else if(fs.existsSync(IMG)){im={full:BASE+'/bc-fresh.png',preview:BASE+'/bc-fresh-preview.png'}}else if(fs.existsSync(HTML)){im=await render(fs.readFileSync(HTML,'utf8'))}if(im&&e.replyToken){await reply(e.replyToken,{type:'image',originalContentUrl:im.full+'?'+Date.now(),previewImageUrl:im.preview+'?'+Date.now()})}else if(e.replyToken){await reply(e.replyToken,{type:'text',text:'⚠️ Chưa có file FRESH gần nhất để xử lý lại.'})}}catch(err){console.error('BC FRESH RESEND',err);if(e.replyToken)await reply(e.replyToken,{type:'text',text:'❌ Không thể dựng lại BC FRESH: '+String(err.message||err).slice(0,180)})}continue;}");
 
 // BC FRESH in a group/room registers that destination for later Excel reports.
 src = src.replace("if(m.type==='text'&&/^BC\\s+FRESH$/i.test(String(m.text||'').trim())){used=true;globalThis.__BC_FRESH_WAITING=true;", "if(m.type==='text'&&/^BC\\s+FRESH$/i.test(String(m.text||'').trim())){used=true;globalThis.__BC_FRESH_WAITING=true;if(e.source?.type==='group'||e.source?.type==='room')saveFreshTarget(to);");
@@ -43,4 +42,6 @@ const runtime = new Module(path.join(__dirname, 'bc_fresh_runtime_compiled.js'),
 runtime.filename = path.join(__dirname, 'bc_fresh_runtime_compiled.js');
 runtime.paths = module.paths;
 runtime._compile(src, runtime.filename);
+// Expose the real Excel-processing function to the FRESH resend handler.
+globalThis.__BC_FRESH_PROCESS = runtime.exports.process;
 module.exports = runtime.exports;
