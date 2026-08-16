@@ -1,5 +1,4 @@
 // BC FRESH runtime wrapper.
-// Keep the runtime transform deliberately simple so generated JS cannot be corrupted.
 const fs = require('fs');
 const path = require('path');
 const Module = require('module');
@@ -16,7 +15,6 @@ function loadFreshTarget(){try{return JSON.parse(fs.readFileSync(TARGET_FILE,'ut
 function saveFreshTarget(to){if(!to)return;try{fs.writeFileSync(TARGET_FILE,JSON.stringify({to,updatedAt:new Date().toISOString()}))}catch(e){console.error('BC FRESH TARGET SAVE',e)}}
 
 let src = fs.readFileSync(sourceFile, 'utf8');
-
 src = src.replace(/process\.env\.LINE_CHANNEL_ACCESS_TOKEN/g, "globalThis.process?.env?.LINE_CHANNEL_ACCESS_TOKEN");
 src = src.replace(/process\.env\.LINE_ACCESS_TOKEN/g, "globalThis.process?.env?.LINE_ACCESS_TOKEN");
 src = src.replace(/process\.env\.RENDER_EXTERNAL_URL/g, "globalThis.process?.env?.RENDER_EXTERNAL_URL");
@@ -27,18 +25,19 @@ src = src.replace("for (const ws of wb.Sheets)", "for (const ws of Object.values
 // Keep destination in scope.
 src = src.replace("const m=e.message||{};", "const m=e.message||{};let to=e.source?.userId||e.source?.groupId||e.source?.roomId;");
 
-// FRESH: in a group/room, use that same destination; in private chat, use the saved group/room.
-src = src.replace("if(m.type==='text'&&/^FRESH$/i.test(String(m.text||'').trim())){", "if(m.type==='text'&&/^FRESH$/i.test(String(m.text||'').trim())){used=true;globalThis.__BC_FRESH_WAITING=false;const dest=(e.source?.type==='group'||e.source?.type==='room')?(saveFreshTarget(to),to):loadFreshTarget();if(fs.existsSync(IMG)&&dest){if(e.replyToken&&e.source?.type!=='group'&&e.source?.type!=='room')await reply(e.replyToken,{type:'text',text:'📊 Đã nhận FRESH. Em gửi BC FRESH gần nhất vào nhóm đã cài.'});await pushMessage(dest,{type:'image',originalContentUrl:BASE+'/bc-fresh.png?'+Date.now(),previewImageUrl:BASE+'/bc-fresh-preview.png?'+Date.now()})}else if(fs.existsSync(IMG)&&e.replyToken){await reply(e.replyToken,{type:'image',originalContentUrl:BASE+'/bc-fresh.png?'+Date.now(),previewImageUrl:BASE+'/bc-fresh-preview.png?'+Date.now()})}else if(e.replyToken)await reply(e.replyToken,{type:'text',text:'⚠️ Chưa có BC FRESH được lưu.'})}else if(m.type==='text'&&/^BC\\s+FRESH$/i.test(String(m.text||'').trim())){");
+// FRESH always replies in the chat where the command was typed.
+// If the PNG was lost after restart, rebuild it from latest.html.
+src = src.replace("const m=e.message||{};let to=e.source?.userId||e.source?.groupId||e.source?.roomId;", "const m=e.message||{};let to=e.source?.userId||e.source?.groupId||e.source?.roomId;if(m.type==='text'&&/^FRESH$/i.test(String(m.text||'').trim())){used=true;globalThis.__BC_FRESH_WAITING=false;try{let im=null;if(fs.existsSync(IMG)){im={full:BASE+'/bc-fresh.png',preview:BASE+'/bc-fresh-preview.png'}}else if(fs.existsSync(HTML)){im=await render(fs.readFileSync(HTML,'utf8'))}if(im&&e.replyToken){await reply(e.replyToken,{type:'image',originalContentUrl:im.full+'?'+Date.now(),previewImageUrl:im.preview+'?'+Date.now()})}else if(e.replyToken){await reply(e.replyToken,{type:'text',text:'⚠️ Chưa có BC FRESH gần nhất để gửi lại.'})}}catch(err){console.error('BC FRESH RESEND',err);if(e.replyToken)await reply(e.replyToken,{type:'text',text:'❌ Không thể gửi lại BC FRESH: '+String(err.message||err).slice(0,160)})}continue;}");
 
-// BC FRESH in GROUP/ROOM registers that destination; private chat does not overwrite it.
-src = src.replace("if(m.type==='text'&&/^BC\\s+FRESH$/i.test(String(m.text||'').trim())){used=true;globalThis.__BC_FRESH_TARGET=to;globalThis.__BC_FRESH_WAITING=true;", "if(m.type==='text'&&/^BC\\s+FRESH$/i.test(String(m.text||'').trim())){used=true;globalThis.__BC_FRESH_TARGET=to;globalThis.__BC_FRESH_WAITING=true;if(e.source?.type==='group'||e.source?.type==='room')saveFreshTarget(to);");
+// BC FRESH in a group/room registers that destination for later Excel reports.
+src = src.replace("if(m.type==='text'&&/^BC\\s+FRESH$/i.test(String(m.text||'').trim())){used=true;globalThis.__BC_FRESH_WAITING=true;", "if(m.type==='text'&&/^BC\\s+FRESH$/i.test(String(m.text||'').trim())){used=true;globalThis.__BC_FRESH_WAITING=true;if(e.source?.type==='group'||e.source?.type==='room')saveFreshTarget(to);");
 
-// Excel result prefers the saved group/room.
+// Excel result prefers the saved group/room; otherwise sender receives it.
 src = src.replace("const to=e.source?.userId||e.source?.groupId||e.source?.roomId;", "const to=loadFreshTarget()||e.source?.userId||e.source?.groupId||e.source?.roomId;");
 
 // @sparticuz/chromium v149 is ESM-first.
 src = src.replace("const chromium=require('@sparticuz/chromium');", "const chromium=(require('@sparticuz/chromium').default||require('@sparticuz/chromium'));");
-src = src.replace("executablePath:globalThis.process.env.PUPPETEER_EXECUTABLE_PATH||undefined", "executablePath:p.executablePath()");
+src = src.replace("executablePath:globalThis.process.env.PUPPETEER_EXECUTABLE_PATH||undefined", "executablePath:await chromium.executablePath()");
 
 const runtime = new Module(path.join(__dirname, 'bc_fresh_runtime_compiled.js'), module);
 runtime.filename = path.join(__dirname, 'bc_fresh_runtime_compiled.js');
