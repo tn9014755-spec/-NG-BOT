@@ -25,16 +25,20 @@ src = src.replace("for (const ws of wb.Sheets)", "for (const ws of Object.values
 // Keep destination in scope.
 src = src.replace("const m=e.message||{};", "const m=e.message||{};let to=e.source?.userId||e.source?.groupId||e.source?.roomId;");
 
-// FRESH = reprocess the last saved Excel file, rebuild the FULL image, and reply in the same private chat.
+// LINE/Express may expose req.body as an object. The old JSON.parse(body.toString())
+// turned that object into '[object Object]' and silently killed the webhook reply.
+src = src.replace("const b=req.rawBody||req.body||Buffer.alloc(0),p=JSON.parse(b.toString('utf8'));", "const raw=req.rawBody??req.body??Buffer.alloc(0);const p=typeof raw==='object'&&!Buffer.isBuffer(raw)?raw:JSON.parse(Buffer.from(raw).toString('utf8'));");
+
+// FRESH = rebuild the latest saved Excel and reply in the exact chat/group where FRESH was typed.
 src = src.replace("const m=e.message||{};let to=e.source?.userId||e.source?.groupId||e.source?.roomId;", "const m=e.message||{};let to=e.source?.userId||e.source?.groupId||e.source?.roomId;if(m.type==='text'&&/^FRESH$/i.test(String(m.text||'').trim())){used=true;globalThis.__BC_FRESH_WAITING=false;try{let im=null;if(fs.existsSync(XLS)&&typeof globalThis.__BC_FRESH_PROCESS==='function'){let meta={};try{meta=JSON.parse(fs.readFileSync(META,'utf8'))}catch(_e){}im=await globalThis.__BC_FRESH_PROCESS(fs.readFileSync(XLS),meta.fileName||'latest.xlsx')}else if(fs.existsSync(IMG)){im={full:BASE+'/bc-fresh.png',preview:BASE+'/bc-fresh-preview.png'}}else if(fs.existsSync(HTML)){im=await render(fs.readFileSync(HTML,'utf8'))}if(im&&e.replyToken){await reply(e.replyToken,{type:'image',originalContentUrl:im.full+'?'+Date.now(),previewImageUrl:im.preview+'?'+Date.now()})}else if(e.replyToken){await reply(e.replyToken,{type:'text',text:'⚠️ Chưa có file FRESH gần nhất để xử lý lại.'})}}catch(err){console.error('BC FRESH RESEND',err);if(e.replyToken)await reply(e.replyToken,{type:'text',text:'❌ Không thể dựng lại BC FRESH: '+String(err.message||err).slice(0,180)})}continue;}");
 
-// BC FRESH in a group/room registers that destination for later Excel reports.
+// BC FRESH registers the current group/room as the destination for later Excel reports.
 src = src.replace("if(m.type==='text'&&/^BC\\s+FRESH$/i.test(String(m.text||'').trim())){used=true;globalThis.__BC_FRESH_WAITING=true;", "if(m.type==='text'&&/^BC\\s+FRESH$/i.test(String(m.text||'').trim())){used=true;globalThis.__BC_FRESH_WAITING=true;if(e.source?.type==='group'||e.source?.type==='room')saveFreshTarget(to);");
 
-// Excel result prefers the saved group/room; otherwise sender receives it.
+// New Excel results go to the saved destination; if none exists, reply to the sender's chat.
 src = src.replace("const to=e.source?.userId||e.source?.groupId||e.source?.roomId;", "const to=loadFreshTarget()||e.source?.userId||e.source?.groupId||e.source?.roomId;");
 
-// @sparticuz/chromium v149 is ESM-first.
+// @sparticuz/chromium compatibility across versions.
 src = src.replace("const chromium=require('@sparticuz/chromium');", "const chromium=(require('@sparticuz/chromium').default||require('@sparticuz/chromium'));");
 src = src.replace("executablePath:globalThis.process.env.PUPPETEER_EXECUTABLE_PATH||undefined", "executablePath:await chromium.executablePath()");
 
