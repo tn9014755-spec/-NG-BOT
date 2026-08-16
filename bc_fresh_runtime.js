@@ -24,18 +24,17 @@ src = src.replace(/process\.env\.PUBLIC_BASE_URL/g, "globalThis.process?.env?.PU
 src = src.replace("for(const ws of wb.Sheets)", "for(const ws of Object.values(wb.Sheets || {}))");
 src = src.replace("for (const ws of wb.Sheets)", "for (const ws of Object.values(wb.Sheets || {}))");
 
-// Keep destination in scope and make the saved group the default destination.
-src = src.replace("const m=e.message||{};", "const m=e.message||{};let to=e.source?.userId||e.source?.groupId||e.source?.roomId;let savedTarget=loadFreshTarget();");
-src = src.replace("const to=e.source?.userId||e.source?.groupId||e.source?.roomId;", "to=savedTarget||e.source?.userId||e.source?.groupId||e.source?.roomId;");
+// Keep destination in scope.
+src = src.replace("const m=e.message||{};", "const m=e.message||{};let to=e.source?.userId||e.source?.groupId||e.source?.roomId;");
 
-// FRESH sent in private chat: resend the latest report to the previously saved GROUP/ROOM.
-src = src.replace("if(m.type==='text'&&/^FRESH$/i.test(String(m.text||'').trim())){", "if(m.type==='text'&&/^FRESH$/i.test(String(m.text||'').trim())){used=true;globalThis.__BC_FRESH_WAITING=false;const dest=loadFreshTarget();if(fs.existsSync(IMG)&&dest){if(e.replyToken)await reply(e.replyToken,{type:'text',text:'📊 Đã nhận FRESH. Em gửi BC FRESH gần nhất vào nhóm đã cài.'});await pushMessage(dest,{type:'image',originalContentUrl:BASE+'/bc-fresh.png?'+Date.now(),previewImageUrl:BASE+'/bc-fresh-preview.png?'+Date.now()})}else if(fs.existsSync(IMG)&&e.replyToken){await reply(e.replyToken,{type:'image',originalContentUrl:BASE+'/bc-fresh.png?'+Date.now(),previewImageUrl:BASE+'/bc-fresh-preview.png?'+Date.now()})}else if(e.replyToken)await reply(e.replyToken,{type:'text',text:'⚠️ Chưa có BC FRESH được lưu.'})}else if(m.type==='text'&&/^BC\\s+FRESH$/i.test(String(m.text||'').trim())){");
+// FRESH: in a group/room, use that same destination; in private chat, use the saved group/room.
+src = src.replace("if(m.type==='text'&&/^FRESH$/i.test(String(m.text||'').trim())){", "if(m.type==='text'&&/^FRESH$/i.test(String(m.text||'').trim())){used=true;globalThis.__BC_FRESH_WAITING=false;const dest=(e.source?.type==='group'||e.source?.type==='room')?(saveFreshTarget(to),to):loadFreshTarget();if(fs.existsSync(IMG)&&dest){if(e.replyToken&&e.source?.type!=='group'&&e.source?.type!=='room')await reply(e.replyToken,{type:'text',text:'📊 Đã nhận FRESH. Em gửi BC FRESH gần nhất vào nhóm đã cài.'});await pushMessage(dest,{type:'image',originalContentUrl:BASE+'/bc-fresh.png?'+Date.now(),previewImageUrl:BASE+'/bc-fresh-preview.png?'+Date.now()})}else if(fs.existsSync(IMG)&&e.replyToken){await reply(e.replyToken,{type:'image',originalContentUrl:BASE+'/bc-fresh.png?'+Date.now(),previewImageUrl:BASE+'/bc-fresh-preview.png?'+Date.now()})}else if(e.replyToken)await reply(e.replyToken,{type:'text',text:'⚠️ Chưa có BC FRESH được lưu.'})}else if(m.type==='text'&&/^BC\\s+FRESH$/i.test(String(m.text||'').trim())){");
 
-// BC FRESH in a GROUP/ROOM registers that destination; private chat does not overwrite it.
-src = src.replace("if(m.type==='text'&&/^BC\\s+FRESH$/i.test(String(m.text||'').trim())){used=true;globalThis.__BC_FRESH_TARGET=to;globalThis.__BC_FRESH_WAITING=true;", "if(m.type==='text'&&/^BC\\s+FRESH$/i.test(String(m.text||'').trim())){used=true;globalThis.__BC_FRESH_TARGET=to;globalThis.__BC_FRESH_WAITING=true;if(e.source?.type==='group'||e.source?.type==='room'){saveFreshTarget(to)}");
+// BC FRESH in GROUP/ROOM registers that destination; private chat does not overwrite it.
+src = src.replace("if(m.type==='text'&&/^BC\\s+FRESH$/i.test(String(m.text||'').trim())){used=true;globalThis.__BC_FRESH_TARGET=to;globalThis.__BC_FRESH_WAITING=true;", "if(m.type==='text'&&/^BC\\s+FRESH$/i.test(String(m.text||'').trim())){used=true;globalThis.__BC_FRESH_TARGET=to;globalThis.__BC_FRESH_WAITING=true;if(e.source?.type==='group'||e.source?.type==='room')saveFreshTarget(to);");
 
-// Excel result always goes to the saved group/room when one exists.
-src = src.replace("to=e.source?.userId||e.source?.groupId||e.source?.roomId;", "to=loadFreshTarget()||e.source?.userId||e.source?.groupId||e.source?.roomId;");
+// Excel result prefers the saved group/room.
+src = src.replace("const to=e.source?.userId||e.source?.groupId||e.source?.roomId;", "const to=loadFreshTarget()||e.source?.userId||e.source?.groupId||e.source?.roomId;");
 
 // @sparticuz/chromium v149 is ESM-first.
 src = src.replace("const chromium=require('@sparticuz/chromium');", "const chromium=(require('@sparticuz/chromium').default||require('@sparticuz/chromium'));");
