@@ -22,6 +22,12 @@ src = src.replace("const b=req.rawBody||req.body||Buffer.alloc(0),p=JSON.parse(b
 src = src.replace("const raw=req.rawBody??req.body??Buffer.alloc(0);const p=typeof raw==='object'&&!Buffer.isBuffer(raw)?raw:JSON.parse(Buffer.from(raw).toString('utf8'));", "const b0=req.rawBody??req.body;const b=b0??await new Promise((resolve,reject)=>{const chunks=[];req.on('data',c=>chunks.push(c));req.on('end',()=>resolve(Buffer.concat(chunks)));req.on('error',reject)});const p=typeof b==='object'&&!Buffer.isBuffer(b)?b:JSON.parse(Buffer.from(b).toString('utf8'));");
 src = src.replace("const chromium=require('@sparticuz/chromium');", "const chromium=(require('@sparticuz/chromium').default||require('@sparticuz/chromium'));");
 src = src.replace("executablePath:globalThis.process.env.PUPPETEER_EXECUTABLE_PATH||undefined", "executablePath:await chromium.executablePath()");
+// BC FRESH: doanh thu dùng DT + DT BÁN GIẢM GIÁ.
+// Sửa ở lớp chuẩn hóa dữ liệu để cả DT tổng, DT theo nhóm và DT từng sản phẩm đều dùng cùng một công thức.
+src = src.replace(
+  "const sale=n(val(r,'Tổng SL bán')),dt=n(val(r,'Doanh thu')),h=n(val(r,'SL hủy tồn'))",
+  "const sale=n(val(r,'Tổng SL bán')),dt=n(val(r,'Doanh thu'))+n(val(r,'DT bán giảm giá')||val(r,'Doanh thu bán giảm giá')||val(r,'Doanh thu bán giảm giá (đ)')),h=n(val(r,'SL hủy tồn'))"
+);
 const runtime = new Module(path.join(__dirname, 'bc_fresh_runtime_compiled.js'), module);
 runtime.filename = path.join(__dirname, 'bc_fresh_runtime_compiled.js');
 runtime.paths = module.paths;
