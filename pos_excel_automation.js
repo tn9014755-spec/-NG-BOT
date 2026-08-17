@@ -1,7 +1,9 @@
-// POS -> Excel automation for ST 28717.
-// Connects to the user's already-open Chrome through CDP (default http://127.0.0.1:9222).
-// It intentionally fails closed: if Chrome/POS is unavailable or a required control cannot
-// be found, it logs the reason and retries instead of clicking an unknown control.
+// FULL LOCAL POS -> EXCEL automation for ST 28717.
+// 1) Reuse Chrome via CDP when available.
+// 2) Otherwise launch a dedicated local Chrome profile with Puppeteer.
+// 3) Navigate POS report 336, set 1st-of-month -> today, store 28717,
+//    request Excel export, open export history, wait for "Đã xuất", download.
+// 4) The existing bc_local_excel_worker.js picks up the downloaded workbook and sends BC NGÀY to LINE.
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
@@ -10,156 +12,177 @@ const puppeteer = require('puppeteer');
 const POS_URL = process.env.POS_REPORT_URL || 'https://pos.bachhoaxanh.com/reports/home/dashboard/336';
 const CDP_URL = process.env.POS_CDP_URL || 'http://127.0.0.1:9222';
 const STORE = process.env.POS_STORE || '28717';
-const INTERVAL = Number(process.env.POS_AUTOMATION_INTERVAL_MS || 60000);
 const DOWNLOAD_DIR = process.env.POS_DOWNLOAD_DIR || path.join(os.homedir(), 'Downloads');
+const PROFILE = process.env.POS_PROFILE_DIR || path.join(__dirname, 'data', 'pos-chrome-profile');
+const INTERVAL = Number(process.env.POS_AUTOMATION_INTERVAL_MS || 15 * 60 * 1000);
 const ENABLED = process.env.POS_AUTOMATION_ENABLED !== '0';
 let running = false;
 
-function pad(n) { return String(n).padStart(2, '0'); }
-function dateText(d) { return `${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()}`; }
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const norm = s => String(s || '').replace(/\s+/g, ' ').trim().toLowerCase();
+const pad = n => String(n).padStart(2, '0');
+function localDateText(d) { return `${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()}`; }
 function firstOfMonth(d) { return new Date(d.getFullYear(), d.getMonth(), 1); }
 
-async function connect() {
-  try { return await puppeteer.connect({ browserURL: CDP_URL, defaultViewport: null }); }
-  catch (e) { return null; }
+async function connectOrLaunch() {
+  try {
+    const browser = await puppeteer.connect({ browserURL: CDP_URL, defaultViewport: null });
+    return { browser, owned: false };
+  } catch (_) {}
+
+  fs.mkdirSync(PROFILE, { recursive: true });
+  const browser = await puppeteer.launch({
+    headless: false,
+    userDataDir: PROFILE,
+    defaultViewport: null,
+    args: ['--start-maximized']
+  });
+  console.log('POS AUTO: launched dedicated Chrome profile; first run may require POS login once.');
+  return { browser, owned: true };
 }
 
-async function visibleText(page, text) {
-  return page.evaluate((needle) => {
-    const norm = s => (s || '').replace(/\s+/g, ' ').trim().toLowerCase();
-    const n = norm(needle);
-    return [...document.querySelectorAll('button,a,[role="button"],label,span,div')]
-      .filter(el => el.offsetParent !== null && norm(el.innerText || el.textContent) === n)
-      .slice(0, 10).map(el => ({tag: el.tagName, text: (el.innerText || el.textContent || '').trim()}));
-  }, text);
+async function getPage(browser) {
+  const pages = await browser.pages();
+  let page = pages.find(p => /pos\.bachhoaxanh\.com/i.test(p.url()));
+  if (!page) page = pages[0] || await browser.newPage();
+  await page.bringToFront();
+  return page;
 }
 
-async function clickText(page, texts, timeout = 5000) {
-  const list = Array.isArray(texts) ? texts : [texts];
-  const deadline = Date.now() + timeout;
-  while (Date.now() < deadline) {
-    for (const text of list) {
-      const ok = await page.evaluate((needle) => {
-        const norm = s => (s || '').replace(/\s+/g, ' ').trim().toLowerCase();
-        const n = norm(needle);
-        const els = [...document.querySelectorAll('button,a,[role="button"],label,span,div')]
-          .filter(el => el.offsetParent !== null && norm(el.innerText || el.textContent) === n);
-        const el = els.find(x => ['BUTTON','A'].includes(x.tagName) || x.getAttribute('role') === 'button') || els[0];
-        if (!el) return false;
-        el.scrollIntoView({block:'center'}); el.click(); return true;
-      }, text);
-      if (ok) { await new Promise(r => setTimeout(r, 800)); return true; }
-    }
-    await new Promise(r => setTimeout(r, 300));
+async function clickByText(page, texts, timeout = 8000) {
+  const wanted = (Array.isArray(texts) ? texts : [texts]).map(norm);
+  const end = Date.now() + timeout;
+  while (Date.now() < end) {
+    const ok = await page.evaluate(wanted => {
+      const n = s => String(s || '').replace(/\s+/g, ' ').trim().toLowerCase();
+      const els = [...document.querySelectorAll('button,a,[role="button"],input[type="button"],input[type="submit"],label')]
+        .filter(e => e.offsetParent !== null);
+      const el = els.find(e => wanted.some(w => n(e.innerText || e.value || e.getAttribute('aria-label')).includes(w)));
+      if (!el) return false;
+      el.scrollIntoView({block:'center'}); el.click(); return true;
+    }, wanted);
+    if (ok) { await sleep(700); return true; }
+    await sleep(300);
   }
   return false;
 }
 
-async function setDateField(page, labels, value) {
-  return page.evaluate(({labels, value}) => {
-    const norm = s => (s || '').replace(/\s+/g, ' ').trim().toLowerCase();
-    const wanted = labels.map(norm);
-    const labelsEls = [...document.querySelectorAll('label')];
-    for (const l of labelsEls) {
-      if (!wanted.some(x => norm(l.innerText).includes(x))) continue;
-      const id = l.htmlFor;
-      const input = id ? document.getElementById(id) : l.querySelector('input');
-      if (input) { input.focus(); input.value = value; input.dispatchEvent(new Event('input',{bubbles:true})); input.dispatchEvent(new Event('change',{bubbles:true})); return true; }
+async function fillDate(page, kind, value) {
+  return page.evaluate(({kind, value}) => {
+    const n = s => String(s || '').replace(/\s+/g, ' ').trim().toLowerCase();
+    const inputs = [...document.querySelectorAll('input')].filter(e => e.offsetParent !== null);
+    const keys = kind === 'from'
+      ? ['từ ngày','from','start','ngày bắt đầu']
+      : ['đến ngày','to','end','ngày kết thúc'];
+    let el = inputs.find(e => keys.some(k => n(`${e.placeholder} ${e.name} ${e.id} ${e.getAttribute('aria-label')}`).includes(k)));
+    if (!el) {
+      const dates = inputs.filter(e => /date|ngày/i.test(`${e.type} ${e.placeholder} ${e.name} ${e.id} ${e.getAttribute('aria-label')}`));
+      el = dates[kind === 'from' ? 0 : 1];
     }
-    const inputs = [...document.querySelectorAll('input')].filter(x => x.offsetParent !== null);
-    const candidates = inputs.filter(x => /date|ngày|from|to/i.test(`${x.placeholder||''} ${x.name||''} ${x.getAttribute('aria-label')||''}`));
-    if (candidates.length >= 2) {
-      const idx = wanted.some(x => /từ|from/.test(x)) ? 0 : 1;
-      const input = candidates[idx]; input.focus(); input.value = value; input.dispatchEvent(new Event('input',{bubbles:true})); input.dispatchEvent(new Event('change',{bubbles:true})); return true;
-    }
-    return false;
-  }, {labels, value});
+    if (!el) return false;
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+    setter.call(el, value);
+    el.dispatchEvent(new Event('input', {bubbles:true}));
+    el.dispatchEvent(new Event('change', {bubbles:true}));
+    el.blur();
+    return true;
+  }, {kind, value});
 }
 
-async function chooseStore(page) {
-  const clicked = await clickText(page, [STORE, `ST ${STORE}`, `Siêu thị ${STORE}`], 3000);
-  if (clicked) return true;
-  return page.evaluate((store) => {
-    const inputs = [...document.querySelectorAll('input')].filter(x => x.offsetParent !== null);
-    const input = inputs.find(x => /siêu thị|store|cửa hàng/i.test(`${x.placeholder||''} ${x.name||''} ${x.getAttribute('aria-label')||''}`));
-    if (!input) return false;
-    input.focus(); input.value = store; input.dispatchEvent(new Event('input',{bubbles:true}));
+async function selectStore(page) {
+  const direct = await clickByText(page, [STORE, `st ${STORE}`, `siêu thị ${STORE}`], 3000);
+  if (direct) return true;
+  return page.evaluate(store => {
+    const n = s => String(s || '').replace(/\s+/g, ' ').trim().toLowerCase();
+    const inputs = [...document.querySelectorAll('input')].filter(e => e.offsetParent !== null);
+    const el = inputs.find(e => /siêu thị|store|cửa hàng/i.test(`${e.placeholder} ${e.name} ${e.id} ${e.getAttribute('aria-label')}`));
+    if (!el) return false;
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+    setter.call(el, store); el.dispatchEvent(new Event('input',{bubbles:true}));
     return true;
   }, STORE);
 }
 
-async function waitForDownload(page, before) {
-  const deadline = Date.now() + 120000;
-  while (Date.now() < deadline) {
-    const files = fs.readdirSync(DOWNLOAD_DIR, {withFileTypes:true}).filter(x => x.isFile() && /\.(xlsx|xls|csv)$/i.test(x.name));
-    const fresh = files.map(x => {
-      const p = path.join(DOWNLOAD_DIR, x.name); const s = fs.statSync(p); return {p, m:s.mtimeMs};
-    }).filter(x => x.m > before).sort((a,b) => b.m-a.m);
+async function chooseExportIfNeeded(page) {
+  if (await clickByText(page, ['Xuất Excel','Export Excel'], 10000)) return true;
+  return false;
+}
+
+async function waitForDownload(before) {
+  const end = Date.now() + 180000;
+  while (Date.now() < end) {
+    let files = [];
+    try { files = fs.readdirSync(DOWNLOAD_DIR); } catch {}
+    const fresh = files.filter(n => /\.(xlsx|xls|csv)$/i.test(n)).map(n => {
+      const p = path.join(DOWNLOAD_DIR,n); let st; try { st=fs.statSync(p); } catch { return null; }
+      return st && st.mtimeMs > before ? {p, m:st.mtimeMs} : null;
+    }).filter(Boolean).sort((a,b)=>b.m-a.m);
     if (fresh[0]) return fresh[0].p;
-    await new Promise(r => setTimeout(r, 1000));
+    await sleep(1000);
   }
   return null;
 }
 
 async function runOnce() {
-  const browser = await connect();
-  if (!browser) return false;
-  let page;
+  const {browser, owned} = await connectOrLaunch();
   try {
-    const pages = await browser.pages();
-    page = pages.find(p => (p.url() || '').includes('pos.bachhoaxanh.com')) || pages[0];
-    if (!page) throw new Error('Không tìm thấy tab Chrome');
-    await page.goto(POS_URL, {waitUntil:'domcontentloaded', timeout:60000}).catch(() => {});
-    await page.bringToFront();
-    await new Promise(r => setTimeout(r, 1500));
+    const page = await getPage(browser);
+    await page.goto(POS_URL, {waitUntil:'domcontentloaded', timeout:60000}).catch(()=>{});
+    await sleep(1500);
+
+    const body = norm(await page.evaluate(() => document.body.innerText || ''));
+    if (/đăng nhập|login|tài khoản|mật khẩu/.test(body) && !/dashboard|báo cáo/.test(body)) {
+      console.error('POS AUTO: POS is not logged in in the automation Chrome profile; waiting for login.');
+      return false;
+    }
 
     const now = new Date();
-    const from = dateText(firstOfMonth(now));
-    const to = dateText(now);
-    const fromOK = await setDateField(page, ['từ ngày','from','ngày bắt đầu'], from);
-    const toOK = await setDateField(page, ['đến ngày','to','ngày kết thúc'], to);
-    if (!fromOK || !toOK) throw new Error(`Không tìm thấy ô ngày (from=${fromOK}, to=${toOK})`);
-    if (!await chooseStore(page)) throw new Error(`Không chọn được siêu thị ${STORE}`);
+    const from = localDateText(firstOfMonth(now));
+    const to = localDateText(now);
+    if (!await fillDate(page,'from',from)) throw new Error('Không tìm thấy ô Từ ngày');
+    if (!await fillDate(page,'to',to)) throw new Error('Không tìm thấy ô Đến ngày');
+    if (!await selectStore(page)) throw new Error(`Không tìm thấy ô Siêu thị / ${STORE}`);
 
-    if (!await clickText(page, ['Xuất Excel','Xuất Excel ','Export Excel'], 8000)) throw new Error('Không tìm thấy nút Xuất Excel');
-    await new Promise(r => setTimeout(r, 1200));
-    if (!await clickText(page, ['Lịch sử xuất Excel','Lịch sử xuất Excel ','Lịch sử'], 10000)) throw new Error('Không tìm thấy Lịch sử xuất Excel');
-    await new Promise(r => setTimeout(r, 1200));
-    if (!await clickText(page, ['Xem báo cáo','Xem Báo cáo','Xem'], 10000)) throw new Error('Không tìm thấy Xem báo cáo');
+    // Trigger filter/search if the page has one; harmless if absent.
+    await clickByText(page, ['Xem báo cáo','Xem','Tìm kiếm','Tra cứu','Áp dụng','Search'], 2500).catch(()=>false);
+    await sleep(1000);
+    if (!await chooseExportIfNeeded(page)) throw new Error('Không tìm thấy nút Xuất Excel');
 
-    const deadline = Date.now() + 120000;
+    await sleep(1000);
+    await clickByText(page, ['Lịch sử xuất Excel','Lịch sử xuất','Lịch sử'], 12000).catch(()=>false);
+    await sleep(1200);
+
+    const historyEnd = Date.now() + 180000;
     let downloaded = null;
-    while (Date.now() < deadline) {
-      const status = await page.evaluate(() => (document.body.innerText || '').replace(/\s+/g,' ').trim());
-      if (/Đã xuất|Da xuat/i.test(status)) {
+    while (Date.now() < historyEnd && !downloaded) {
+      const status = norm(await page.evaluate(() => document.body.innerText || ''));
+      if (/đã xuất|da xuat/.test(status)) {
         const before = Date.now();
-        await clickText(page, ['Tải file','Tải xuống','Download','Excel'], 8000).catch(() => false);
-        downloaded = await waitForDownload(page, before);
+        await clickByText(page, ['Tải file','Tải xuống','Download','Excel'], 8000).catch(()=>false);
+        downloaded = await waitForDownload(before);
         if (downloaded) break;
       }
-      await new Promise(r => setTimeout(r, 1500));
-      await page.reload({waitUntil:'domcontentloaded', timeout:30000}).catch(() => {});
+      await sleep(2000);
+      await page.reload({waitUntil:'domcontentloaded', timeout:30000}).catch(()=>{});
     }
-    if (!downloaded) throw new Error('Không tải được Excel sau khi trạng thái Đã xuất');
-    console.log('POS AUTO EXPORT OK', downloaded);
+    if (!downloaded) throw new Error('Không có file mới sau trạng thái Đã xuất');
+    console.log('POS AUTO EXPORT OK:', downloaded);
     return true;
   } finally {
-    try { await browser.disconnect(); } catch {}
+    if (owned) { try { await browser.close(); } catch {} }
+    else { try { await browser.disconnect(); } catch {} }
   }
 }
 
 async function tick() {
   if (!ENABLED || running) return;
   running = true;
-  try { await runOnce(); }
-  catch (e) { console.error('POS AUTO ERROR:', e.message || e); }
+  try { await runOnce(); } catch (e) { console.error('POS AUTO ERROR:', e.message || e); }
   finally { running = false; }
 }
 
 if (ENABLED) {
-  console.log(`POS AUTO READY -> ${POS_URL} | store ${STORE} | CDP ${CDP_URL}`);
+  console.log(`POS AUTO READY | store=${STORE} | report=336 | interval=${INTERVAL}ms`);
   setTimeout(tick, 5000);
   setInterval(tick, INTERVAL);
-} else {
-  console.log('POS AUTO DISABLED');
 }
