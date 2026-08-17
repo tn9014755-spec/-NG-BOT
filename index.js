@@ -3,3 +3,4 @@
 require('./bc_fresh_runtime.js');
 require('./bc_fresh_order_fix.js');
 require('./bc_server.js');
+require('./bc_local_excel_worker.js');
