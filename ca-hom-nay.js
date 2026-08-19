@@ -7,7 +7,6 @@ const laNgay=o=>/\(\s*\d{1,2}\s*\/\s*\d{1,2}\s*\)/.test(text(o));
 const laCa=o=>/^ca\s*[1-6]$/i.test(text(o));
 const coCa=v=>{if(v===null||v===undefined)return false;if(typeof v==='number')return Number.isFinite(v)&&v>0;const s=text(v).toLowerCase();if(!s||s==='0'||s==='-'||s==='—'||s==='–')return false;const n=Number(s.replace(',','.'));return Number.isFinite(n)?n>0:true};
 const giaTri=v=>{if(typeof v==='number'&&Number.isFinite(v)&&v>0)return v;const n=Number(text(v).replace(',','.'));return Number.isFinite(n)&&n>0?n:1};
-
 function docLichCa(rows,nam){
   const year=nam||new Date().getFullYear();
   let dongNgay=-1,max=0;
@@ -36,7 +35,10 @@ function docLichCa(rows,nam){
       if(!name||/^h[ọo]\s*t[êe]n$/i.test(name))continue;
       const shifts={};
       for(let ca=1;ca<=6;ca++){const c=cols[ca];if(c!==undefined&&coCa(row[c]))shifts[ca]=giaTri(row[c])}
-      if(Object.keys(shifts).length)(out[key]||(out[key]={}))[name]=shifts;
+      if(Object.keys(shifts).length){
+        const day=out[key]||(out[key]={});
+        day[name]=Object.assign({},day[name]||{},shifts);
+      }
     }
   }
   if(!Object.keys(out).length)throw Error('Không có dữ liệu nhân viên');
