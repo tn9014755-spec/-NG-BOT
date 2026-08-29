@@ -109,6 +109,6 @@ function aiData(rows,meta={}){
 }
 function aiContext(){try{if(!fs.existsSync(XLS))return "";const rows=parse(fs.readFileSync(XLS));return rows.length?JSON.stringify(aiData(rows,get()||{})):""}catch(e){return ""}}
 function history(limit=10){try{return fs.readdirSync(HISTORY).filter(n=>/^fresh-.*\.json$/.test(n)).sort().reverse().slice(0,limit).map(n=>JSON.parse(fs.readFileSync(path.join(HISTORY,n),"utf8"))).filter(Boolean)}catch(e){return []}}
-function aiHistoryContext(limit=8){const list=history(limit);return list.length?JSON.stringify(list.map(x=>({id:x.id,fileName:x.fileName,updatedAt:x.updatedAt,data:x.data||x}))):""}
+function aiHistoryContext(limit=8){const list=history(limit);return list.length?JSON.stringify(list.map(x=>({id:x.id,fileName:x.fileName,updatedAt:x.updatedAt,data:x.data||x}))):""}\nfunction restoreHistory(items){let n=0;for(const item of Array.isArray(items)?items:[]){const x=item&&item.data?item.data:item;if(!x||!x.id||!(x.data||x.loaiBaoCao))continue;try{const file=path.join(HISTORY,"fresh-"+String(x.id)+".json");if(!fs.existsSync(file)){fs.writeFileSync(file,JSON.stringify(x,null,2));n++}}catch(e){}}return n}
 
-module.exports={save,get,beginUpload,isPending,finishUpload,exists,page,aiContext,history,aiHistoryContext};
+module.exports={save,get,beginUpload,isPending,finishUpload,exists,page,aiContext,history,aiHistoryContext,restoreHistory};
