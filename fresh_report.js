@@ -91,4 +91,28 @@ function isPending(){try{return JSON.parse(fs.readFileSync(PENDING,"utf8")).acti
 function finishUpload(){try{fs.unlinkSync(PENDING)}catch{}}
 function exists(){return fs.existsSync(XLS)&&fs.existsSync(HTML)}
 function page(){return fs.readFileSync(HTML,"utf8")}
-module.exports={save,get,beginUpload,isPending,finishUpload,exists,page};
+function aiContext(){
+ try{
+  if(!fs.existsSync(XLS))return "";
+  const rows=parse(fs.readFileSync(XLS));
+  if(!rows.length)return "";
+  const products=new Map();
+  for(const r of rows){
+   const key=[r.c,r.code||r.name,r.name].join("|");
+   const p=products.get(key)||{c:r.c,name:r.name,code:r.code,sale:0,sold:0,mm:0,ncc:0,ht:0};
+   p.sale+=Number(r.sale||0);p.sold+=Number(r.sold||0);p.mm+=Number(r.mm||0);p.ncc+=Number(r.ncc||0);p.ht+=Number(r.ht||0);
+   products.set(key,p);
+  }
+  const a=[...products.values()].map(p=>({...p,loss:(p.mm+p.ncc+p.ht)*(p.sold?p.sale/p.sold:0)}));
+  const sale=sum(a,"sale"),loss=sum(a,"loss");
+  const groups=["FRESH","ĐÔNG MÁT"].map(g=>{
+   const z=a.filter(x=>bucket(x.c)===g);
+   return {nhom:g,doanhThu:sum(z,"sale"),haoHut:sum(z,"loss"),tyLe:pct(sum(z,"loss"),sum(z,"sale")),
+    nganh:[...new Set(z.map(x=>x.c))].map(c=>{const y=z.filter(x=>x.c===c);return{ten:c,doanhThu:sum(y,"sale"),haoHut:sum(y,"loss"),tyLe:pct(sum(y,"loss"),sum(y,"sale"))}}).sort((x,y)=>y.haoHut-x.haoHut)};
+  });
+  const top=[...a].sort((x,y)=>y.loss-x.loss).slice(0,20).map(x=>({ten:x.name,nganh:x.c,haoHut:x.loss,doanhThu:x.sale,slMatMat:x.mm,slHaoHutNCC:x.ncc,slHuyTon:x.ht}));
+  const meta=get()||{};
+  return JSON.stringify({loaiBaoCao:"FRESH & ĐÔNG MÁT",fileName:meta.fileName||"",updatedAt:meta.updatedAt||"",soDong:rows.length,tongDoanhThu:sale,tongHaoHut:loss,tyLe:pct(loss,sale),nhom:groups,topMatHang:top});
+ }catch(e){return ""}
+}
+module.exports={save,get,beginUpload,isPending,finishUpload,exists,page,aiContext};
