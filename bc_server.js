@@ -27,13 +27,19 @@ async function reply(token,messages){if(!TOKEN||!token)return false;const ms=cle
 async function push(to,messages){if(!TOKEN||!to)return false;const ms=cleanMessages(messages);if(!ms.length)return false;const r=await line(API+"/message/push",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({to,messages:ms})});console.log("📤 LINE PUSH",r.status);if(!r.ok)console.error("LINE PUSH ERROR:",await r.text());return r.ok}
 const GEMINI_KEY=process.env.GEMINI_API_KEY||"";
 const GEMINI_MODEL=process.env.GEMINI_MODEL||"gemini-3.6-flash";
-const GEMINI_SYSTEM="Bạn là NG-BOT, trợ lý AI tiếng Việt thân thiện của anh. Trả lời tự nhiên, đầy đủ, đúng trọng tâm. Bạn hỗ trợ công việc báo cáo và vận hành. Không bịa kết quả hay nói đã thực hiện việc khi chưa có dữ liệu/log xác nhận. Khi có dữ liệu báo cáo, phải bám đúng số liệu. Xưng em và gọi người dùng là anh. QUAN TRỌNG VỀ ĐỊNH DẠNG: trả lời bằng văn bản thuần, TUYỆT ĐỐI không dùng markdown. Không dùng ** để in đậm, không dùng * hoặc - đầu dòng, không dùng # làm tiêu đề, không dùng bảng. LINE hiển thị nguyên các ký tự đó nên rất xấu. Muốn nhấn mạnh thì viết IN HOA hoặc dùng emoji. Danh sách thì mỗi ý một dòng, mở đầu bằng emoji hoặc số thứ tự.";
+const GEMINI_SYSTEM="Bạn là NG-BOT, trợ lý AI tiếng Việt thân thiện của anh. Trả lời tự nhiên, đầy đủ, đúng trọng tâm. Bạn hỗ trợ công việc báo cáo và vận hành. Không bịa kết quả hay nói đã thực hiện việc khi chưa có dữ liệu/log xác nhận. Khi có dữ liệu báo cáo, phải bám đúng số liệu. Xưng em và gọi người dùng là anh. QUAN TRỌNG VỀ ĐỊNH DẠNG: trả lời bằng văn bản thuần, TUYỆT ĐỐI không dùng markdown. Không dùng ** để in đậm, không dùng * hoặc - đầu dòng, không dùng # làm tiêu đề, không dùng bảng. LINE hiển thị nguyên các ký tự đó nên rất xấu. Muốn nhấn mạnh thì viết IN HOA hoặc dùng emoji. Danh sách thì mỗi ý một dòng, mở đầu bằng emoji hoặc số thứ tự. QUAN TRỌNG VỀ THỜI GIAN: ngày giờ hiện tại luôn được hệ thống truyền trực tiếp trong từng câu hỏi. Tuyệt đối không dùng ngày tháng từ trí nhớ, dữ liệu huấn luyện hay tự suy đoán. Khi người dùng nói hôm nay, hôm qua, ngày mai, tuần này hoặc năm nay thì phải tính dựa trên THỜI GIAN HỆ THỐNG được cung cấp. Nếu hệ thống không cung cấp thời gian thì phải nói không xác định, không được đoán.";
 function latestReportContext(){
  try{const s=state();if(s.lastReportData)return JSON.stringify(s.lastReportData).slice(0,24000)}catch(e){console.warn("⚠️ Không đọc được BC đã gửi cho AI:",e.message)}
  try{const local=latestLocalJson();if(local?.data)return JSON.stringify(local.data).slice(0,24000)}catch(e){console.warn("⚠️ Không đọc được BC local cho AI:",e.message)}
  return "";
 }
 function formatReportForAI(data){try{return "DỮ LIỆU BC NGÀY MỚI NHẤT (JSON GỐC):\n"+JSON.stringify(data||{}).slice(0,30000)}catch{return ""}}
+function vietnamNowContext(){
+ const now=new Date();
+ const parts=new Intl.DateTimeFormat("vi-VN",{timeZone:"Asia/Ho_Chi_Minh",weekday:"long",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit",hourCycle:"h23"}).formatToParts(now);
+ const o={}; for(const p of parts)if(p.type!=="literal")o[p.type]=p.value;
+ return "THỜI GIAN HỆ THỐNG HIỆN TẠI (MÚI GIỜ VIỆT NAM, Asia/Ho_Chi_Minh): "+(o.weekday||"")+" "+(o.day||"")+"/"+(o.month||"")+"/"+(o.year||"")+" "+(o.hour||"")+":"+(o.minute||"")+":"+(o.second||"")+". ISO: "+(o.year||"")+"-"+(o.month||"")+"-"+(o.day||"")+".";
+}
 async function askGemini(userText,reportContext=""){
  if(!GEMINI_KEY)throw new Error("Chưa cấu hình GEMINI_API_KEY trên Render");
  const fallbackEnv=String(process.env.GEMINI_FALLBACK_MODELS||"gemini-3.7-flash").split(/[;,]/).map(x=>x.trim()).filter(Boolean);
@@ -41,9 +47,11 @@ async function askGemini(userText,reportContext=""){
  const q=String(userText||"");
  const deep=/(phân tích sâu|phân tích đầy đủ|chi tiết toàn bộ|báo cáo đầy đủ|tổng hợp đầy đủ)/i.test(q);
  const fastContext=reportContext?String(reportContext).slice(0,deep?24000:20000):"";
+ const timeContext=vietnamNowContext();
+ const rules="\n\n"+timeContext+"\nQUY TẮC BẮT BUỘC: Đây là nguồn thời gian duy nhất. Không được thay thế bằng ngày tháng từ trí nhớ. Với câu hỏi về hôm nay/hôm qua/ngày mai phải quy đổi từ thời gian này. Nếu người dùng chỉ hỏi ngày hiện tại, trả lời đúng ngày hệ thống và không phân tích báo cáo không liên quan.";
  const prompt=fastContext
-  ?"YÊU CẦU CỦA ANH:\n"+q+"\n\n"+fastContext+"\n\nTrả lời trực tiếp bằng tiếng Việt, bám đúng số liệu. Nếu chỉ hỏi một chỉ số/ngành hàng thì trả lời ngắn gọn. Nếu yêu cầu phân tích thì nêu kết luận trước, sau đó số liệu và hành động. Không bịa số liệu, không kết thúc dang dở."
-  :q;
+  ?"YÊU CẦU CỦA ANH:\n"+q+"\n\n"+fastContext+rules+"\n\nTrả lời trực tiếp bằng tiếng Việt, bám đúng số liệu. Nếu chỉ hỏi một chỉ số/ngành hàng thì trả lời ngắn gọn. Nếu yêu cầu phân tích thì nêu kết luận trước, sau đó số liệu và hành động. Không bịa số liệu, không kết thúc dang dở."
+  :"YÊU CẦU CỦA ANH:\n"+q+rules;
  const outputLimit=deep?8192:4096;
  const perCallMs=Number(process.env.GEMINI_TIMEOUT_MS||12000);
  const deadline=Date.now()+Number(process.env.GEMINI_TOTAL_BUDGET_MS||30000);
