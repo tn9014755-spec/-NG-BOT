@@ -20,7 +20,16 @@ function category(x){
 function bucket(c){return c==="Sản Phẩm Từ Sữa - Bảo Quản Mát"||c==="Thực phẩm đông lạnh - Hàng mát các loại"||c==="Kem các loại"?"ĐÔNG MÁT":"FRESH"}
 function parse(buf){
  const wb=XLSX.read(buf,{type:"buffer"}),rows=[];
- for(const ws of Object.values(wb.Sheets))rows.push(...XLSX.utils.sheet_to_json(ws,{defval:""}));
+ // Chỉ đọc sheet dữ liệu đầu tiên có đủ cột ngành hàng và tên sản phẩm,
+ // tránh cộng trùng dữ liệu từ sheet phụ/tổng hợp.
+ for(const sheetName of wb.SheetNames){
+  const ws=wb.Sheets[sheetName];
+  const data=XLSX.utils.sheet_to_json(ws,{defval:""});
+  if(!data.length)continue;
+  const keys=Object.keys(data[0]||{}).map(x=>String(x).toLowerCase());
+  const ok=keys.some(k=>k.includes("ngành hàng"))&&keys.some(k=>k.includes("tên sản phẩm"));
+  if(ok){rows.push(...data);break}
+ }
  const out=[];
  for(const r of rows){
   const c=category(find(r,["ngành hàng"]));if(!c)continue;
@@ -29,7 +38,7 @@ function parse(buf){
   const brand=String(find(r,["tên hãng","ten hang"])).trim();
   if(!name)continue;
   if(/(^|[^a-z])c\.?\s*p\.?([^a-z]|$)/i.test(name+" "+code+" "+brand))continue;
-  const sale=num(find(r,["doanh thu"]))+num(find(r,["dt bán giảm giá","doanh thu bán giảm giá"]));
+  const sale=num(find(r,["doanh thu thuần","doanh thu"]));
   const sold=num(find(r,["sl thực xuất","sl thuc xuat","tổng sl bán","tong sl ban"]));
   const mm=num(find(r,["sl mất mát kiểm kê","sl mat mat kiem ke"]));
   const ncc=num(find(r,["sl hủy hao hụt ncc","sl huy hao hut ncc"]));
