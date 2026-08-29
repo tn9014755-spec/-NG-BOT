@@ -101,7 +101,33 @@ async function xuLyFileLichCa(buf,fileName,replyToken,userId){try{const wb=XLSX.
 function ngayTheoLenhCa(t,d){const now=new Date();if(t==="CA HOM NAY")return new Date(now.getFullYear(),now.getMonth(),now.getDate());if(t==="CA MAI"){const x=new Date(now.getFullYear(),now.getMonth(),now.getDate());x.setDate(x.getDate()+1);return x}const m=t.match(/^CA\s+(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{4}))?$/);if(!m)return null;return new Date(Number(m[3]||now.getFullYear()),Number(m[2])-1,Number(m[1]))}
 app.post("/webhook",async(req,res)=>{const b=req.rawBody||Buffer.from(JSON.stringify(req.body||{})),sig=req.get("x-line-signature")||"";if(SECRET){const h=crypto.createHmac("sha256",SECRET).update(b).digest("base64");if(!sig||sig.length!==h.length||!crypto.timingSafeEqual(Buffer.from(sig),Buffer.from(h)))return res.status(401).send("invalid signature")}res.status(200).send("OK");if(!TOKEN)return;for(const e of req.body?.events||[]){if(!e.replyToken||e.mode==="standby")continue;const target=e.source?.groupId||e.source?.roomId||e.source?.userId||"",userId=e.source?.userId||"",m=e.message||{};if(m.type==="text"){const raw=String(m.text||"").trim(),t=raw.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/\s+/g," ");const hasBotMention=(Array.isArray(m.mention?.mentionees)&&m.mention.mentionees.length>0)||/@\s*TRỢ\s*LÝ\s*-?\s*AI/i.test(raw);if(hasBotMention){const mt=meeting.add(raw,target,userId);if(mt){console.log(`📅 NHẮC LỊCH → Ghi: ${mt.content} | ${mt.date} ${mt.hour}h${String(mt.minute).padStart(2,"0")} | user=${userId} | group=${target}`);await reply(e.replyToken,tagAnh(meeting.format(mt),userId));continue}}if(t==="LAY LICH CA"){try{const lich=ca.docLich();const days=Object.keys(lich).sort();if(!days.length){await reply(e.replyToken,tagAnh("📋 Chưa có lịch ca đã lưu. Anh gửi file lịch phân ca trước nhé.",userId));continue}const first=days[0],last=days[days.length-1],today=new Date(),todayKey=`${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,"0")}-${String(today.getDate()).padStart(2,"0")}`,view=ca.theCaNgay(lich,new Date(todayKey+"T00:00:00"));await reply(e.replyToken,[tagAnh(`📋 LỊCH CA ĐÃ LƯU\n📅 ${first} → ${last}\n📊 ${days.length} ngày\n\nĐang xem lịch hôm nay:`,userId),view])}catch(err){console.error("❌ LẤY LỊCH CA",err);await reply(e.replyToken,tagAnh("❌ Không đọc được lịch ca đã lưu.",userId))}continue}
 const ngayCa=ngayTheoLenhCa(t);if(ngayCa){try{const lich=ca.docLich();console.log(`📋 LỆNH CA → ${t} → ${ngayCa.toISOString().slice(0,10)}`);await reply(e.replyToken,ca.theCaNgay(lich,ngayCa))}catch(err){console.error("❌ LỆNH CA",err);await reply(e.replyToken,tagAnh("❌ Không đọc được lịch ca.",userId))}continue}
-if(t==="PING"){await reply(e.replyToken,{type:"text",text:"✅ BOT ĐÃ KẾT NỐI"});continue}if(t==="FRESH"){
+if(t==="PING"){await reply(e.replyToken,{type:"text",text:"✅ BOT ĐÃ KẾT NỐI"});continue}if(["XEM DATA FRESH","XEM DATAFRESH","DATA FRESH","XEM LẠI DATA FRESH","XEM BAO CAO FRESH","XEM BÁO CÁO FRESH"].includes(t)){
+ try{
+  if(!fresh.exists()){
+   await reply(e.replyToken,tagAnh("📭 CHƯA CÓ DATA FRESH
+
+Anh nhắn FRESH rồi gửi file thô trước nhé.",userId));
+   continue
+  }
+  const x=fresh.get()||{};
+  const base=String(process.env.RENDER_EXTERNAL_URL||process.env.PUBLIC_BASE_URL||"https://ng-bot-c0im.onrender.com").replace(/\/$/,"");
+  const flex={type:"flex",altText:"XEM DATA FRESH & ĐÔNG MÁT",contents:{type:"bubble",body:{type:"box",layout:"vertical",contents:[
+   {type:"text",text:"🥬 DATA FRESH & ĐÔNG MÁT",weight:"bold",size:"lg",wrap:true},
+   {type:"text",text:"📎 File đang lưu: "+String(x.fileName||"FILE FRESH MỚI NHẤT").slice(0,90),size:"xs",color:"#777777",wrap:true,margin:"md"},
+   {type:"text",text:"TỔNG HAO HỤT",size:"xs",color:"#777777",margin:"md"},
+   {type:"text",text:Math.round(x.loss||0).toLocaleString("vi-VN")+"đ",weight:"bold",size:"xxl",color:"#C62828"},
+   {type:"text",text:"Tỷ lệ "+Number(x.pct||0).toFixed(2)+"% · Doanh thu "+Math.round(x.sale||0).toLocaleString("vi-VN")+"đ",size:"sm",wrap:true,margin:"sm"}
+  ]},footer:{type:"box",layout:"vertical",contents:[
+   {type:"button",style:"primary",action:{type:"uri",label:"📊 XEM BÁO CÁO CHI TIẾT",uri:base+"/fresh.html"}}
+  ]}}};
+  await reply(e.replyToken,flex);
+ }catch(err){
+  console.error("❌ XEM DATA FRESH ERROR",err);
+  await reply(e.replyToken,tagAnh("❌ Không đọc được DATA FRESH đã lưu.",userId));
+ }
+ continue
+}
+if(t==="FRESH"){
  try{
   fresh.beginUpload();
   await reply(e.replyToken,tagAnh("🥬 ĐÃ SẴN SÀNG NHẬN FILE FRESH\n\n📎 Anh gửi file thô hao hụt FRESH + ĐÔNG MÁT ngay bây giờ.\n\n⚠️ Bot chỉ xử lý file FRESH sau khi anh nhắn lệnh FRESH, nên sẽ không nhầm với file BC SỨC KHỎE.",userId));
