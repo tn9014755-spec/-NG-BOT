@@ -41,7 +41,8 @@ async function askGemini(userText,reportContext=""){
  const prompt=reportContext
   ? "YÊU CẦU CỦA ANH:\n"+String(userText||"")+"\n\n"+reportContext+"\n\nNHIỆM VỤ: Phân tích CHÍNH dữ liệu BC ở trên. Trả lời hoàn chỉnh bằng tiếng Việt, không dùng bảng markdown. Bắt buộc có 4 phần: 1. TỔNG QUAN, 2. ĐIỂM TÍCH CỰC, 3. ĐIỂM CẦN CHÚ Ý, 4. KẾT LUẬN & HÀNH ĐỘNG. Mỗi phần phải có nội dung thực tế dựa trên số liệu. Không được trả lời dang dở, không chỉ in tiêu đề, không yêu cầu gửi lại file."
   : String(userText||"");
- const body={system_instruction:{parts:[{text:GEMINI_SYSTEM+" Khi có dữ liệu báo cáo, phải phân tích đúng số liệu được cung cấp. Không được bịa số liệu. Luôn trả lời hoàn chỉnh."}]},contents:[{role:"user",parts:[{text:prompt}]}],generationConfig:{temperature:0.3,maxOutputTokens:1600}};
+ const strictPrompt=prompt+"\n\nĐỊNH DẠNG BẮT BUỘC: Bắt đầu ngay bằng \"1. TỔNG QUAN\". Sau đó lần lượt có đủ \"2. ĐIỂM TÍCH CỰC\", \"3. ĐIỂM CẦN CHÚ Ý\", \"4. KẾT LUẬN & HÀNH ĐỘNG\". Mỗi phần 2-4 ý cụ thể. Không mở đầu bằng câu chung chung. Không kết thúc giữa câu.";
+ const body={system_instruction:{parts:[{text:GEMINI_SYSTEM+" Khi có dữ liệu báo cáo, phải phân tích đúng số liệu được cung cấp. Không được bịa số liệu. Luôn trả lời hoàn chỉnh, có đủ 4 phần theo yêu cầu."}]},contents:[{role:"user",parts:[{text:strictPrompt}]}],generationConfig:{temperature:0.25,maxOutputTokens:2400}};
  let r,j,lastErr;
  for(let attempt=0;attempt<3;attempt++){
   try{
@@ -58,11 +59,18 @@ async function askGemini(userText,reportContext=""){
   }
  }
  if(!r?.ok)throw lastErr||new Error("Gemini request failed after retries");
- const candidate=(j.candidates||[])[0]||{};
- const out=(candidate.content?.parts||[]).map(x=>x.text||"").join("").trim();
+ let candidate=(j.candidates||[])[0]||{};
+ let out=(candidate.content?.parts||[]).map(x=>x.text||"").join("").trim();
+ const complete=x=>x.length>=250&&/1\.\s*TỔNG QUAN/i.test(x)&&/2\.\s*ĐIỂM TÍCH CỰC/i.test(x)&&/3\.\s*ĐIỂM CẦN CHÚ Ý/i.test(x)&&/4\.\s*KẾT LUẬN/i.test(x);
+ if(!complete(out)){
+  const repairBody={...body,contents:[{role:"user",parts:[{text:strictPrompt+"\n\nBẢN TRẢ LỜI VỪA RỒI CHƯA ĐỦ. Hãy tạo lại TOÀN BỘ bản phân tích hoàn chỉnh từ đầu, đủ 4 phần. Không tiếp tục dang dở."}]}]};
+  const rr=await fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(repairBody)});
+  const jj=await rr.json().catch(()=>({}));
+  if(rr.ok){candidate=(jj.candidates||[])[0]||{};out=(candidate.content?.parts||[]).map(x=>x.text||"").join("").trim();}
+ }
  if(!out)throw new Error("Gemini không trả về nội dung");
- if(out.length<80)throw new Error("Gemini trả lời quá ngắn, chưa đủ phân tích");
- return out.slice(0,6000);
+ if(!complete(out))throw new Error("AI chưa tạo đủ 4 phần phân tích, vui lòng thử lại");
+ return out.slice(0,9000);
 }
 async function checkMeetingReminders(){for(const m of meeting.due()){console.log(`⏰ MEETING → Gửi nhắc: ${m.content} | ${m.date} ${m.hour}h${String(m.minute).padStart(2,"0")}`);const uid=m.userId||"";const ok=await push(m.target,tagAnh(`⏰ NHẮC LỊCH\n\n📝 ${m.content}\n🕐 ${String(m.hour).padStart(2,"0")}h${String(m.minute).padStart(2,"0")}\n📆 ${m.date}`,uid));if(!ok)console.warn(`⚠️ NHẮC LỊCH → LINE gửi thất bại: ${m.id}`)}}
 async function saveBCPersistence(name,data){try{putLocalJson(name,data)}catch(e){console.error(`❌ LOCAL BC WRITE ERROR → ${name}:`,e.message)}if(hasDriveCredentials()){Promise.resolve().then(()=>putJson(name,data)).catch(e=>console.warn(`⚠️ DRIVE BC WRITE FAILED → ${name}: ${e.message}`))}else console.log(`ℹ️ DRIVE BC BACKGROUND SKIP → chưa có Google credentials | ${name}`)}
