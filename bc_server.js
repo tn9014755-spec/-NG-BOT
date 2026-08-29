@@ -36,13 +36,17 @@ function formatReportForAI(data){try{return "DỮ LIỆU BC NGÀY MỚI NHẤT (
 async function askGemini(userText,reportContext=""){
  if(!GEMINI_KEY)throw new Error("Chưa cấu hình GEMINI_API_KEY trên Render");
  const models=[GEMINI_MODEL,...String(process.env.GEMINI_FALLBACK_MODELS||"gemini-2.5-flash").split(/[;,]/).map(x=>x.trim()).filter(x=>x&&x!==GEMINI_MODEL)].slice(0,2);
- const prompt=reportContext?"YÊU CẦU CỦA ANH:\n"+String(userText||"")+"\n\n"+reportContext+"\n\nHãy trả lời ĐẦY ĐỦ bằng tiếng Việt dựa đúng số liệu. Nếu phân tích báo cáo: nêu tổng quan, điểm tích cực, điểm cần chú ý, nguyên nhân có thể suy ra từ dữ liệu và hành động đề xuất. Không bịa số liệu, không yêu cầu gửi lại dữ liệu đã có và không kết thúc dang dở.":String(userText||"");
+ const q=String(userText||"");
+ const deep=/(phân tích sâu|phân tích đầy đủ|chi tiết toàn bộ|báo cáo đầy đủ|tổng hợp đầy đủ)/i.test(q);
+ const fastContext=reportContext?String(reportContext).slice(0,deep?30000:9000):"";
+ const prompt=fastContext?"YÊU CẦU CỦA ANH:\n"+q+"\n\n"+fastContext+"\n\nTrả lời trực tiếp bằng tiếng Việt, bám đúng số liệu. Nếu câu hỏi chỉ hỏi một chỉ số/ngành hàng thì trả lời ngắn gọn, nêu số liệu và nhận định chính. Chỉ phân tích dài khi anh yêu cầu phân tích sâu. Không bịa số liệu và không kết thúc dang dở.":q;
+ const outputLimit=deep?8192:1400;
  let lastErr;
  for(const model of models){
   const url="https://generativelanguage.googleapis.com/v1beta/models/"+encodeURIComponent(model)+":generateContent?key="+encodeURIComponent(GEMINI_KEY);
   for(let attempt=0;attempt<2;attempt++){
    try{
-    const body={system_instruction:{parts:[{text:GEMINI_SYSTEM}]},contents:[{role:"user",parts:[{text:prompt}]}],generationConfig:{maxOutputTokens:8192,temperature:0.35}};
+    const body={system_instruction:{parts:[{text:GEMINI_SYSTEM}]},contents:[{role:"user",parts:[{text:prompt}]}],generationConfig:{maxOutputTokens:outputLimit,temperature:0.35}};
     const r=await fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
     const j=await r.json().catch(()=>({}));
     if(!r.ok){const e=new Error("Gemini "+r.status+" "+(j.error?.message||"request failed"));e.status=r.status;throw e}
