@@ -121,9 +121,7 @@ const ngayCa=ngayTheoLenhCa(t);if(ngayCa){try{const lich=ca.docLich();console.lo
 if(t==="PING"){await reply(e.replyToken,{type:"text",text:"✅ BOT ĐÃ KẾT NỐI"});continue}if(["XEM DATA FRESH","XEM DATAFRESH","DATA FRESH","XEM LẠI DATA FRESH","XEM BAO CAO FRESH","XEM BÁO CÁO FRESH"].includes(t)){
  try{
   if(!fresh.exists()){
-   await reply(e.replyToken,tagAnh("📭 CHƯA CÓ DATA FRESH
-
-Anh nhắn FRESH rồi gửi file thô trước nhé.",userId));
+   await reply(e.replyToken,tagAnh("📭 CHƯA CÓ DATA FRESH\n\nAnh nhắn FRESH rồi gửi file thô trước nhé.",userId));
    continue
   }
   const x=fresh.get()||{};
