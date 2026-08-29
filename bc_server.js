@@ -20,6 +20,10 @@ const GEMINI_MODEL=process.env.GEMINI_MODEL||"gemini-3.6-flash";
 const GEMINI_SYSTEM="Bạn là NG-BOT, trợ lý AI tiếng Việt thân thiện của anh. Trả lời tự nhiên, ngắn gọn, đúng trọng tâm. Bạn hỗ trợ công việc báo cáo và vận hành. Không bịa kết quả hay nói đã thực hiện việc khi chưa có dữ liệu/log xác nhận. Nếu người dùng hỏi về báo cáo nhưng hệ thống chưa có dữ liệu phù hợp, nói rõ. Xưng em và gọi người dùng là anh.";
 function latestReportContext(){
  try{
+  const s=state();
+  if(s.lastReportData)return JSON.stringify(s.lastReportData).slice(0,18000);
+ }catch(e){console.warn("⚠️ Không đọc được BC đã gửi cho AI:",e.message)}
+ try{
   const local=latestLocalJson();
   if(local?.data)return JSON.stringify(local.data).slice(0,18000);
  }catch(e){console.warn("⚠️ Không đọc được BC local cho AI:",e.message)}
@@ -29,7 +33,7 @@ async function askGemini(userText,reportContext=""){
  if(!GEMINI_KEY)throw new Error("Chưa cấu hình GEMINI_API_KEY");
  const url="https://generativelanguage.googleapis.com/v1beta/models/"+encodeURIComponent(GEMINI_MODEL)+":generateContent?key="+encodeURIComponent(GEMINI_KEY);
  const prompt=reportContext
-  ? "YÊU CẦU CỦA ANH:\n"+String(userText||"")+"\n\nDỮ LIỆU BC SỨC KHỎE MỚI NHẤT (nguồn để phân tích):\n"+reportContext+"\n\nHãy phân tích trực tiếp số liệu trên. Nêu điểm tốt, điểm cần chú ý, biến động và kết luận ngắn gọn. Không nói là chưa thấy dữ liệu nếu dữ liệu đã có ở trên."
+  ? "YÊU CẦU CỦA ANH:\n"+String(userText||"")+"\n\nĐÂY LÀ DỮ LIỆU CỦA CHÍNH BÁO CÁO BOT VỪA GỬI TRONG LINE (nguồn để phân tích):\n"+reportContext+"\n\nHãy phân tích trực tiếp báo cáo này. Nêu điểm tốt, điểm cần chú ý, biến động và kết luận ngắn gọn. Không yêu cầu anh gửi lại file hoặc dữ liệu khi dữ liệu đã có ở trên."
   : String(userText||"");
  const body={system_instruction:{parts:[{text:GEMINI_SYSTEM+" Khi có DỮ LIỆU BC SỨC KHỎE trong câu hỏi, phải dùng chính dữ liệu đó để phân tích."}]},contents:[{role:"user",parts:[{text:prompt}]}],generationConfig:{temperature:0.4,maxOutputTokens:1200}};
  const r=await fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
@@ -42,7 +46,14 @@ async function askGemini(userText,reportContext=""){
 async function checkMeetingReminders(){for(const m of meeting.due()){console.log(`⏰ MEETING → Gửi nhắc: ${m.content} | ${m.date} ${m.hour}h${String(m.minute).padStart(2,"0")}`);const uid=m.userId||"";const ok=await push(m.target,tagAnh(`⏰ NHẮC LỊCH\n\n📝 ${m.content}\n🕐 ${String(m.hour).padStart(2,"0")}h${String(m.minute).padStart(2,"0")}\n📆 ${m.date}`,uid));if(!ok)console.warn(`⚠️ NHẮC LỊCH → LINE gửi thất bại: ${m.id}`)}}
 async function saveBCPersistence(name,data){try{putLocalJson(name,data)}catch(e){console.error(`❌ LOCAL BC WRITE ERROR → ${name}:`,e.message)}if(hasDriveCredentials()){Promise.resolve().then(()=>putJson(name,data)).catch(e=>console.warn(`⚠️ DRIVE BC WRITE FAILED → ${name}: ${e.message}`))}else console.log(`ℹ️ DRIVE BC BACKGROUND SKIP → chưa có Google credentials | ${name}`)}
 async function buildAndStore(){const data=buildData(),date=String(data.ngay.nhan).split("/").reverse().join("-"),name=`bc-${date}.json`,template=await downloadTemplate();await saveBCPersistence(name,data);return{data,date,html:applyTemplate(template,data)}}
-async function sendBC(target,userId){const out=await buildAndStore(),ok=await push(target,[tagAnh("✅ BC SỨC KHỎE ĐÃ XONG",userId),buildBCFlex(out.data)]);if(!ok)throw new Error("LINE PUSH BC thất bại");return out}
+async function sendBC(target,userId){
+ const out=await buildAndStore();
+ const ok=await push(target,[tagAnh("✅ BC SỨC KHỎE ĐÃ XONG",userId),buildBCFlex(out.data)]);
+ if(!ok)throw new Error("LINE PUSH BC thất bại");
+ const prev=state();
+ saveState({...prev,lastReportData:out.data,lastReportDate:out.date,lastReportType:"BC SỨC KHỎE",lastReportSavedAt:new Date().toISOString()});
+ return out
+}
 function noReport(res){return res.status(404).type("html").send(`<!doctype html><html lang="vi"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>BC SỨC KHỎE</title><body style="font-family:Arial;background:#eef3f8;padding:30px"><div style="max-width:600px;margin:auto;background:#fff;border-radius:16px;padding:24px"><h2>Chưa có báo cáo</h2><p>Chưa có báo cáo cho ngày này.</p></div></body></html>`)}
 function validDate(s){return/^\d{4}-\d{2}-\d{2}$/.test(s)&&!isNaN(new Date(`${s}T00:00:00`))}
 async function serveData(res,data){if(!data)return noReport(res);try{res.type("html").send(applyTemplate(await downloadTemplate(),data))}catch(e){console.error("❌ BC VIEW ERROR",e);res.status(500).send("Không tải được khuôn mẫu báo cáo.")}}
