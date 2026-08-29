@@ -16,7 +16,7 @@ function tagAnh(text,userId){text=String(text||"");if(!userId)return{type:"text"
 async function reply(token,messages){if(!TOKEN||!token)return false;const ms=cleanMessages(messages);if(!ms.length)return false;const r=await line(API+"/message/reply",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({replyToken:token,messages:ms})});console.log("📤 LINE REPLY",r.status);if(!r.ok)console.error(await r.text());return r.ok}
 async function push(to,messages){if(!TOKEN||!to)return false;const ms=cleanMessages(messages);if(!ms.length)return false;const r=await line(API+"/message/push",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({to,messages:ms})});console.log("📤 LINE PUSH",r.status);if(!r.ok)console.error("LINE PUSH ERROR:",await r.text());return r.ok}
 const GEMINI_KEY=process.env.GEMINI_API_KEY||"";
-const GEMINI_MODEL=process.env.GEMINI_MODEL||"gemini-2.5-flash";
+const GEMINI_MODEL=process.env.GEMINI_MODEL||"gemini-3.6-flash";
 const GEMINI_SYSTEM="Bạn là NG-BOT, trợ lý AI tiếng Việt thân thiện của anh. Trả lời tự nhiên, ngắn gọn, đúng trọng tâm. Bạn hỗ trợ công việc báo cáo và vận hành. Không bịa kết quả hay nói đã thực hiện việc khi chưa có dữ liệu/log xác nhận. Nếu người dùng hỏi về báo cáo nhưng hệ thống chưa có dữ liệu phù hợp, nói rõ. Xưng em và gọi người dùng là anh.";
 async function askGemini(userText){
  if(!GEMINI_KEY)throw new Error("Chưa cấu hình GEMINI_API_KEY");
