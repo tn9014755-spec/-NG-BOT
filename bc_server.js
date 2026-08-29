@@ -25,7 +25,7 @@ function splitTextForLine(text,userId){
 async function reply(token,messages){if(!TOKEN||!token)return false;const ms=cleanMessages(messages);if(!ms.length)return false;const r=await line(API+"/message/reply",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({replyToken:token,messages:ms})});console.log("📤 LINE REPLY",r.status);if(!r.ok)console.error(await r.text());return r.ok}
 async function push(to,messages){if(!TOKEN||!to)return false;const ms=cleanMessages(messages);if(!ms.length)return false;const r=await line(API+"/message/push",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({to,messages:ms})});console.log("📤 LINE PUSH",r.status);if(!r.ok)console.error("LINE PUSH ERROR:",await r.text());return r.ok}
 const GEMINI_KEY=process.env.GEMINI_API_KEY||"";
-const GEMINI_MODEL=process.env.GEMINI_MODEL||"gemini-2.5-flash";
+const GEMINI_MODEL=process.env.GEMINI_MODEL||"gemini-3.6-flash";
 const GEMINI_SYSTEM="Bạn là NG-BOT, trợ lý AI tiếng Việt thân thiện của anh. Trả lời tự nhiên, đầy đủ, đúng trọng tâm. Bạn hỗ trợ công việc báo cáo và vận hành. Không bịa kết quả hay nói đã thực hiện việc khi chưa có dữ liệu/log xác nhận. Khi có dữ liệu báo cáo, phải bám đúng số liệu. Xưng em và gọi người dùng là anh.";
 function latestReportContext(){
  try{const s=state();if(s.lastReportData)return JSON.stringify(s.lastReportData).slice(0,24000)}catch(e){console.warn("⚠️ Không đọc được BC đã gửi cho AI:",e.message)}
@@ -35,8 +35,8 @@ function latestReportContext(){
 function formatReportForAI(data){try{return "DỮ LIỆU BC NGÀY MỚI NHẤT (JSON GỐC):\n"+JSON.stringify(data||{}).slice(0,30000)}catch{return ""}}
 async function askGemini(userText,reportContext=""){
  if(!GEMINI_KEY)throw new Error("Chưa cấu hình GEMINI_API_KEY trên Render");
- const fallbackEnv=String(process.env.GEMINI_FALLBACK_MODELS||"gemini-2.5-flash-lite;gemini-2.0-flash").split(/[;,]/).map(x=>x.trim()).filter(Boolean);
- const models=[...new Set([GEMINI_MODEL,...fallbackEnv])].slice(0,4);
+ const fallbackEnv=String(process.env.GEMINI_FALLBACK_MODELS||"gemini-3.7-flash").split(/[;,]/).map(x=>x.trim()).filter(Boolean);
+ const models=[...new Set([GEMINI_MODEL,...fallbackEnv])].slice(0,3);
  const q=String(userText||"");
  const deep=/(phân tích sâu|phân tích đầy đủ|chi tiết toàn bộ|báo cáo đầy đủ|tổng hợp đầy đủ)/i.test(q);
  const fastContext=reportContext?String(reportContext).slice(0,deep?22000:7000):"";
@@ -44,11 +44,15 @@ async function askGemini(userText,reportContext=""){
   ?"YÊU CẦU CỦA ANH:\n"+q+"\n\n"+fastContext+"\n\nTrả lời trực tiếp bằng tiếng Việt, bám đúng số liệu. Nếu chỉ hỏi một chỉ số/ngành hàng thì trả lời ngắn gọn. Nếu yêu cầu phân tích thì nêu kết luận trước, sau đó số liệu và hành động. Không bịa số liệu, không kết thúc dang dở."
   :q;
  const outputLimit=deep?6144:1600;
+ const perCallMs=Number(process.env.GEMINI_TIMEOUT_MS||12000);
+ const deadline=Date.now()+Number(process.env.GEMINI_TOTAL_BUDGET_MS||30000);
  let lastErr;
  for(const model of models){
   for(let attempt=0;attempt<2;attempt++){
+   const remain=deadline-Date.now();
+   if(remain<=1500){console.warn("⏱️ GEMINI đã hết ngân sách thời gian, dừng thử model");lastErr=lastErr||new Error("Gemini quá hạn thời gian");break}
    const controller=new AbortController();
-   const timer=setTimeout(()=>controller.abort(),Number(process.env.GEMINI_TIMEOUT_MS||45000));
+   const timer=setTimeout(()=>controller.abort(),Math.min(perCallMs,remain));
    try{
     const url="https://generativelanguage.googleapis.com/v1beta/models/"+encodeURIComponent(model)+":generateContent?key="+encodeURIComponent(GEMINI_KEY);
     const body={system_instruction:{parts:[{text:GEMINI_SYSTEM}]},contents:[{role:"user",parts:[{text:prompt}]}],generationConfig:{maxOutputTokens:outputLimit,temperature:0.3}};
@@ -57,12 +61,12 @@ async function askGemini(userText,reportContext=""){
     if(!r.ok){const e=new Error("Gemini "+r.status+" "+(j.error?.message||"request failed"));e.status=r.status;throw e}
     const cand=(j.candidates||[])[0]||{};
     const out=(cand.content?.parts||[]).map(x=>x.text||"").join("").trim();
-    if(out.length<20)throw new Error("Gemini trả lời quá ngắn");
+    if(!out)throw new Error("Gemini trả lời rỗng");
     return out.slice(0,30000);
    }catch(err){
     lastErr=err;
     console.warn("⚠️ GEMINI",model,"lần",attempt+1,err.message);
-    const retryable=err.name==="AbortError"||[500,502,503,504].includes(err.status);
+    const retryable=[500,502,504].includes(err.status);
     if(retryable&&attempt===0){await new Promise(r=>setTimeout(r,500));continue}
     break;
    }finally{clearTimeout(timer)}
