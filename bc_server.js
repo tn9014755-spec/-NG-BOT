@@ -32,27 +32,29 @@ function latestReportContext(){
  try{const local=latestLocalJson();if(local?.data)return JSON.stringify(local.data).slice(0,24000)}catch(e){console.warn("⚠️ Không đọc được BC local cho AI:",e.message)}
  return "";
 }
-function formatReportForAI(data){try{return "DỮ LIỆU BC NGÀY MỚI NHẤT (JSON GỐC):\n"+JSON.stringify(data||{}).slice(0,24000)}catch{return ""}}
+function formatReportForAI(data){try{return "DỮ LIỆU BC NGÀY MỚI NHẤT (JSON GỐC):\n"+JSON.stringify(data||{}).slice(0,12000)}catch{return ""}}
 async function askGemini(userText,reportContext=""){
  if(!GEMINI_KEY)throw new Error("Chưa cấu hình GEMINI_API_KEY trên Render");
- const models=[GEMINI_MODEL,...String(process.env.GEMINI_FALLBACK_MODELS||"gemini-3.6-flash;gemini-3.5-flash-lite;gemini-2.5-flash").split(/[;,]/).map(x=>x.trim()).filter(x=>x&&x!==GEMINI_MODEL)];
+ const models=[GEMINI_MODEL,...String(process.env.GEMINI_FALLBACK_MODELS||"gemini-2.5-flash").split(/[;,]/).map(x=>x.trim()).filter(x=>x&&x!==GEMINI_MODEL)].slice(0,2);
  const prompt=reportContext?"YÊU CẦU CỦA ANH:\n"+String(userText||"")+"\n\n"+reportContext+"\n\nHãy trả lời ĐẦY ĐỦ bằng tiếng Việt dựa đúng số liệu. Nếu phân tích báo cáo: nêu tổng quan, điểm tích cực, điểm cần chú ý, nguyên nhân có thể suy ra từ dữ liệu và hành động đề xuất. Không bịa số liệu, không yêu cầu gửi lại dữ liệu đã có và không kết thúc dang dở.":String(userText||"");
  let lastErr;
  for(const model of models){
   const url="https://generativelanguage.googleapis.com/v1beta/models/"+encodeURIComponent(model)+":generateContent?key="+encodeURIComponent(GEMINI_KEY);
-  for(let attempt=0;attempt<3;attempt++){
+  for(let attempt=0;attempt<2;attempt++){
    try{
-    const body={system_instruction:{parts:[{text:GEMINI_SYSTEM}]},contents:[{role:"user",parts:[{text:prompt}]}],generationConfig:{maxOutputTokens:4000}};
+    const body={system_instruction:{parts:[{text:GEMINI_SYSTEM}]},contents:[{role:"user",parts:[{text:prompt}]}],generationConfig:{maxOutputTokens:2200,temperature:0.35}};
     const r=await fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
     const j=await r.json().catch(()=>({}));
     if(!r.ok){const e=new Error("Gemini "+r.status+" "+(j.error?.message||"request failed"));e.status=r.status;throw e}
     const cand=(j.candidates||[])[0]||{};
     const out=(cand.content?.parts||[]).map(x=>x.text||"").join("").trim();
     if(out.length<20)throw new Error("Gemini trả lời quá ngắn");
-    return out.slice(0,22000);
+    return out.slice(0,12000);
    }catch(err){
     lastErr=err; console.warn("⚠️ GEMINI",model,"lần",attempt+1,err.message);
-    if([429,500,502,503].includes(err.status)){await new Promise(r=>setTimeout(r,1500*(attempt+1)));continue}
+    if([500,502,503].includes(err.status)&&attempt===0){await new Promise(r=>setTimeout(r,700));continue}
+    // 429 là hết quota, retry cùng model chỉ làm chậm bot; chuyển fallback ngay.
+    if(err.status===429)break
     break;
    }
   }
