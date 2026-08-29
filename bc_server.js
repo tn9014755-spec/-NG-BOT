@@ -42,9 +42,22 @@ async function askGemini(userText,reportContext=""){
   ? "YÊU CẦU CỦA ANH:\n"+String(userText||"")+"\n\n"+reportContext+"\n\nNHIỆM VỤ: Phân tích CHÍNH dữ liệu BC ở trên. Trả lời hoàn chỉnh bằng tiếng Việt, không dùng bảng markdown. Bắt buộc có 4 phần: 1. TỔNG QUAN, 2. ĐIỂM TÍCH CỰC, 3. ĐIỂM CẦN CHÚ Ý, 4. KẾT LUẬN & HÀNH ĐỘNG. Mỗi phần phải có nội dung thực tế dựa trên số liệu. Không được trả lời dang dở, không chỉ in tiêu đề, không yêu cầu gửi lại file."
   : String(userText||"");
  const body={system_instruction:{parts:[{text:GEMINI_SYSTEM+" Khi có dữ liệu báo cáo, phải phân tích đúng số liệu được cung cấp. Không được bịa số liệu. Luôn trả lời hoàn chỉnh."}]},contents:[{role:"user",parts:[{text:prompt}]}],generationConfig:{temperature:0.3,maxOutputTokens:1600}};
- const r=await fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
- const j=await r.json().catch(()=>({}));
- if(!r.ok)throw new Error("Gemini "+r.status+" "+(j.error?.message||"request failed"));
+ let r,j,lastErr;
+ for(let attempt=0;attempt<3;attempt++){
+  try{
+   r=await fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+   j=await r.json().catch(()=>({}));
+   if(r.ok)break;
+   lastErr=new Error("Gemini "+r.status+" "+(j.error?.message||"request failed"));
+   if(r.status!==429&&r.status!==503)throw lastErr;
+   await new Promise(resolve=>setTimeout(resolve,1200*(attempt+1)));
+  }catch(err){
+   lastErr=err;
+   if(attempt===2)break;
+   await new Promise(resolve=>setTimeout(resolve,1200*(attempt+1)));
+  }
+ }
+ if(!r?.ok)throw lastErr||new Error("Gemini request failed after retries");
  const candidate=(j.candidates||[])[0]||{};
  const out=(candidate.content?.parts||[]).map(x=>x.text||"").join("").trim();
  if(!out)throw new Error("Gemini không trả về nội dung");
