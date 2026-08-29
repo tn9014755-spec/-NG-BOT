@@ -13,6 +13,15 @@ function saveState(x){fs.writeFileSync(STATE,JSON.stringify(x,null,2))}
 function line(url,opt={}){return fetch(url,{...opt,headers:{Authorization:"Bearer "+TOKEN,...(opt.headers||{})}})}
 function cleanMessages(messages){return(Array.isArray(messages)?messages:[messages]).filter(m=>m&&typeof m==="object"&&typeof m.type==="string"&&m.type.trim()).slice(0,5)}
 function tagAnh(text,userId){text=String(text||"");if(!userId)return{type:"text",text};return{type:"text",text:"@Anh "+text,mention:{mentionees:[{index:0,length:4,userId}]}}}
+function splitTextForLine(text,userId){
+ text=String(text||"").trim(); if(!text)return [];
+ const max=4700, parts=[];
+ while(text.length>max&&parts.length<4){
+  let cut=text.lastIndexOf("\n",max); if(cut<Math.floor(max*0.6))cut=text.lastIndexOf(" ",max); if(cut<1)cut=max;
+  parts.push(tagAnh(text.slice(0,cut).trim(),userId)); text=text.slice(cut).trim();
+ }
+ parts.push(tagAnh(text,userId)); return parts.slice(0,5);
+}
 async function reply(token,messages){if(!TOKEN||!token)return false;const ms=cleanMessages(messages);if(!ms.length)return false;const r=await line(API+"/message/reply",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({replyToken:token,messages:ms})});console.log("📤 LINE REPLY",r.status);if(!r.ok)console.error(await r.text());return r.ok}
 async function push(to,messages){if(!TOKEN||!to)return false;const ms=cleanMessages(messages);if(!ms.length)return false;const r=await line(API+"/message/push",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({to,messages:ms})});console.log("📤 LINE PUSH",r.status);if(!r.ok)console.error("LINE PUSH ERROR:",await r.text());return r.ok}
 const GEMINI_KEY=process.env.GEMINI_API_KEY||"";
@@ -37,26 +46,40 @@ function formatReportForAI(data){
 }
 async function askGemini(userText,reportContext=""){
  if(!GEMINI_KEY)throw new Error("Chưa cấu hình GEMINI_API_KEY");
- const url="https://generativelanguage.googleapis.com/v1beta/models/"+encodeURIComponent(GEMINI_MODEL)+":generateContent?key="+encodeURIComponent(GEMINI_KEY);
- const prompt=reportContext
-  ? "YÊU CẦU CỦA ANH:\n"+String(userText||"")+"\n\n"+reportContext+"\n\nHãy phân tích CHÍNH số liệu báo cáo trên bằng tiếng Việt. Trả lời hoàn chỉnh trong MỘT tin nhắn, khoảng 8-15 ý ngắn. Nêu: tổng quan, điểm tích cực, điểm cần chú ý và hành động đề xuất. Không bịa số liệu, không yêu cầu gửi lại dữ liệu, không dừng giữa chừng."
+ const primary=GEMINI_MODEL||"gemini-2.5-flash";
+ const models=[primary,...String(process.env.GEMINI_FALLBACK_MODELS||"gemini-2.5-flash-lite;gemini-2.5-flash").split(/[;,]/).map(x=>x.trim()).filter(x=>x&&x!==primary)];
+ const basePrompt=reportContext
+  ? "YÊU CẦU CỦA ANH:\n"+String(userText||"")+"\n\n"+reportContext+"\n\nHãy trả lời ĐẦY ĐỦ bằng tiếng Việt dựa đúng số liệu. Nếu là yêu cầu phân tích: nêu tổng quan, điểm tích cực, điểm cần chú ý và hành động đề xuất. Trả lời trong một lần, không bịa số liệu, không yêu cầu gửi lại dữ liệu và không kết thúc dang dở."
   : String(userText||"");
- const body={system_instruction:{parts:[{text:GEMINI_SYSTEM+" Khi có dữ liệu báo cáo, hãy phân tích đúng số liệu và trả lời hoàn chỉnh. Không dùng tiêu đề bắt buộc cứng nhắc."}]},contents:[{role:"user",parts:[{text:prompt}]}],generationConfig:{temperature:0.3,maxOutputTokens:2200}};
  let lastErr;
- for(let attempt=0;attempt<3;attempt++){
-  try{
+ for(const model of models){
+  const url="https://generativelanguage.googleapis.com/v1beta/models/"+encodeURIComponent(model)+":generateContent?key="+encodeURIComponent(GEMINI_KEY);
+  const run=async(prompt)=>{
+   const body={system_instruction:{parts:[{text:GEMINI_SYSTEM+" Khi có dữ liệu báo cáo, hãy phân tích đúng số liệu và trả lời hoàn chỉnh."}]},contents:[{role:"user",parts:[{text:prompt}]}],generationConfig:{temperature:0.25,maxOutputTokens:2600}};
    const r=await fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
    const j=await r.json().catch(()=>({}));
-   if(r.ok){
-    const out=((j.candidates||[])[0]?.content?.parts||[]).map(x=>x.text||"").join("").trim();
-    if(out.length>=80)return out.slice(0,8500);
-    lastErr=new Error("Gemini trả lời quá ngắn");
-   }else{
-    lastErr=new Error("Gemini "+r.status+" "+(j.error?.message||"request failed"));
-    if(r.status!==429&&r.status!==503)break;
+   if(!r.ok){const e=new Error("Gemini "+r.status+" "+(j.error?.message||"request failed"));e.status=r.status;throw e}
+   const cand=(j.candidates||[])[0]||{};
+   return {text:(cand.content?.parts||[]).map(x=>x.text||"").join("").trim(),finish:cand.finishReason||""};
+  };
+  for(let attempt=0;attempt<2;attempt++){
+   try{
+    const first=await run(basePrompt);
+    let out=first.text;
+    if(out.length<80)throw new Error("Gemini trả lời quá ngắn");
+    if(first.finish==="MAX_TOKENS"||out.length<350){
+     try{
+      const more=await run(basePrompt+"\n\nBẢN NHÁP ĐÃ CÓ:\n"+out+"\n\nHãy viết lại TOÀN BỘ câu trả lời hoàn chỉnh hơn, đủ các ý còn thiếu. Không nhắc đến bản nháp.");
+      if(more.text.length>out.length*0.8)out=more.text;
+     }catch(e){console.warn("⚠️ Không mở rộng câu trả lời:",e.message)}
+    }
+    return out.slice(0,18000);
+   }catch(err){
+    lastErr=err; console.warn("⚠️ GEMINI",model,"lần",attempt+1,err.message);
+    if(err.status===429||err.status===503){await new Promise(r=>setTimeout(r,1500*(attempt+1))); continue}
+    break;
    }
-  }catch(err){lastErr=err}
-  await new Promise(resolve=>setTimeout(resolve,1200*(attempt+1)));
+  }
  }
  throw lastErr||new Error("Gemini không trả về nội dung");
 }
@@ -85,5 +108,5 @@ async function xuLyFileLichCa(buf,fileName,replyToken,userId){try{const wb=XLSX.
 function ngayTheoLenhCa(t,d){const now=new Date();if(t==="CA HOM NAY")return new Date(now.getFullYear(),now.getMonth(),now.getDate());if(t==="CA MAI"){const x=new Date(now.getFullYear(),now.getMonth(),now.getDate());x.setDate(x.getDate()+1);return x}const m=t.match(/^CA\s+(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{4}))?$/);if(!m)return null;return new Date(Number(m[3]||now.getFullYear()),Number(m[2])-1,Number(m[1]))}
 app.post("/webhook",async(req,res)=>{const b=req.rawBody||Buffer.from(JSON.stringify(req.body||{})),sig=req.get("x-line-signature")||"";if(SECRET){const h=crypto.createHmac("sha256",SECRET).update(b).digest("base64");if(!sig||sig.length!==h.length||!crypto.timingSafeEqual(Buffer.from(sig),Buffer.from(h)))return res.status(401).send("invalid signature")}res.status(200).send("OK");if(!TOKEN)return;for(const e of req.body?.events||[]){if(!e.replyToken||e.mode==="standby")continue;const target=e.source?.groupId||e.source?.roomId||e.source?.userId||"",userId=e.source?.userId||"",m=e.message||{};if(m.type==="text"){const raw=String(m.text||"").trim(),t=raw.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/\s+/g," ");const hasBotMention=Array.isArray(m.mention?.mentionees)&&m.mention.mentionees.length>0;if(hasBotMention){const mt=meeting.add(raw,target,userId);if(mt){console.log(`📅 NHẮC LỊCH → Ghi: ${mt.content} | ${mt.date} ${mt.hour}h${String(mt.minute).padStart(2,"0")} | user=${userId} | group=${target}`);await reply(e.replyToken,tagAnh(meeting.format(mt),userId));continue}}if(t==="LAY LICH CA"){try{const lich=ca.docLich();const days=Object.keys(lich).sort();if(!days.length){await reply(e.replyToken,tagAnh("📋 Chưa có lịch ca đã lưu. Anh gửi file lịch phân ca trước nhé.",userId));continue}const first=days[0],last=days[days.length-1],today=new Date(),todayKey=`${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,"0")}-${String(today.getDate()).padStart(2,"0")}`,view=ca.theCaNgay(lich,new Date(todayKey+"T00:00:00"));await reply(e.replyToken,[tagAnh(`📋 LỊCH CA ĐÃ LƯU\n📅 ${first} → ${last}\n📊 ${days.length} ngày\n\nĐang xem lịch hôm nay:`,userId),view])}catch(err){console.error("❌ LẤY LỊCH CA",err);await reply(e.replyToken,tagAnh("❌ Không đọc được lịch ca đã lưu.",userId))}continue}
 const ngayCa=ngayTheoLenhCa(t);if(ngayCa){try{const lich=ca.docLich();console.log(`📋 LỆNH CA → ${t} → ${ngayCa.toISOString().slice(0,10)}`);await reply(e.replyToken,ca.theCaNgay(lich,ngayCa))}catch(err){console.error("❌ LỆNH CA",err);await reply(e.replyToken,tagAnh("❌ Không đọc được lịch ca.",userId))}continue}
-if(t==="PING"){await reply(e.replyToken,{type:"text",text:"✅ BOT ĐÃ KẾT NỐI"});continue}if(!["BC","DATA","NẠP DỮ LIỆU","NAP DU LIEU"].includes(t)){if(!hasBotMention)continue;try{const reportData=latestReportContext();const reportContext=reportData?formatReportForAI(JSON.parse(reportData)):"";const ai=await askGemini(raw,reportContext);await reply(e.replyToken,tagAnh(ai,userId))}catch(err){console.error("❌ GEMINI ERROR",err);await reply(e.replyToken,tagAnh("❌ AI chưa trả lời được: "+String(err.message||err).slice(0,180),userId))}continue}if(t==="NẠP DỮ LIỆU"||t==="NAP DU LIEU"){report.resetPending();saveState({active:true,startedAt:new Date().toISOString()});console.log("📥 DATA SPECIALIST → Mở phiên NẠP DỮ LIỆU");await reply(e.replyToken,{type:"text",text:"📥 ĐÃ SẴN SÀNG NẠP DỮ LIỆU\n\nAnh gửi 2 file Excel.\nBot sẽ nhận đủ 2 file → kiểm tra số liệu → tạo BC và lưu Drive."});continue}if(t==="DATA"||t==="BC"){try{console.log("📊 DATA SPECIALIST → DATA/BC được yêu cầu");if(typeof report.promote==="function")report.promote();if(!report.hasData()){await reply(e.replyToken,{type:"text",text:"📭 Chưa có BC gần nhất. Anh gõ NẠP DỮ LIỆU và gửi 2 file."});continue}await reply(e.replyToken,{type:"text",text:"🔄 Đang kiểm tra số liệu và tạo BC SỨC KHỎE..."});await sendBC(target,userId)}catch(err){console.error("❌ DATA ERROR",err);await push(target,tagAnh("❌ DATA lỗi: "+String(err.message||err).slice(0,180),userId))}continue}}if(m.type==="file"){const name=String(m.fileName||"").toLowerCase();if(!/\.(xlsx|xls|csv)$/.test(name)){await reply(e.replyToken,tagAnh("⚠️ Chỉ nhận file Excel/CSV.",userId));continue}try{console.log("📎 FILE → Nhận:",m.fileName);const r=await fetch(DATA_API+"/message/"+encodeURIComponent(m.id)+"/content",{headers:{Authorization:"Bearer "+TOKEN}});if(!r.ok)throw new Error("LINE download "+r.status);const buf=Buffer.from(await r.arrayBuffer());if(laFileLichCa(buf)){await xuLyFileLichCa(buf,m.fileName,e.replyToken,userId);continue}const st=state();if(!st.active){await reply(e.replyToken,tagAnh("📥 Anh gõ NẠP DỮ LIỆU trước, rồi gửi 2 file Excel nhé.",userId));continue}const got=report.ingest(buf,m.fileName||("DATA_"+Date.now()+".xlsx"));console.log(`🔎 DATA CHECK → ${got.type} | đủ 2 file: ${got.ready}`);if(!got.ready){await reply(e.replyToken,tagAnh(`✅ Đã nhận file ${got.type==="store"?"DOANH THU SIÊU THỊ":"NGÀNH HÀNG"}\n\n📎 Còn thiếu 1 file nữa.`,userId));continue}if(!report.promote())throw new Error("Không lưu được đủ 2 file dữ liệu");await reply(e.replyToken,tagAnh("✅ ĐÃ NHẬN ĐỦ 2 FILE\n🔎 Đang kiểm tra số liệu...\n🔄 Đang tạo BC và lưu JSON lên Google Drive...",userId));await sendBC(target,userId);saveState({active:false,readyAt:new Date().toISOString()});console.log("✅ VALIDATION → Số liệu + BC đã lưu Drive")}catch(err){console.error("❌ FILE ERROR",err);await push(target,tagAnh("❌ Xử lý file lỗi: "+String(err.message||err).slice(0,180),userId))}}}});
+if(t==="PING"){await reply(e.replyToken,{type:"text",text:"✅ BOT ĐÃ KẾT NỐI"});continue}if(!["BC","DATA","NẠP DỮ LIỆU","NAP DU LIEU"].includes(t)){if(!hasBotMention)continue;try{const reportData=latestReportContext();const reportContext=reportData?formatReportForAI(JSON.parse(reportData)):"";const ai=await askGemini(raw,reportContext);await reply(e.replyToken,splitTextForLine(ai,userId))}catch(err){console.error("❌ GEMINI ERROR",err);await reply(e.replyToken,tagAnh("❌ AI chưa trả lời được: "+String(err.message||err).slice(0,180),userId))}continue}if(t==="NẠP DỮ LIỆU"||t==="NAP DU LIEU"){report.resetPending();saveState({active:true,startedAt:new Date().toISOString()});console.log("📥 DATA SPECIALIST → Mở phiên NẠP DỮ LIỆU");await reply(e.replyToken,{type:"text",text:"📥 ĐÃ SẴN SÀNG NẠP DỮ LIỆU\n\nAnh gửi 2 file Excel.\nBot sẽ nhận đủ 2 file → kiểm tra số liệu → tạo BC và lưu Drive."});continue}if(t==="DATA"||t==="BC"){try{console.log("📊 DATA SPECIALIST → DATA/BC được yêu cầu");if(typeof report.promote==="function")report.promote();if(!report.hasData()){await reply(e.replyToken,{type:"text",text:"📭 Chưa có BC gần nhất. Anh gõ NẠP DỮ LIỆU và gửi 2 file."});continue}await reply(e.replyToken,{type:"text",text:"🔄 Đang kiểm tra số liệu và tạo BC SỨC KHỎE..."});await sendBC(target,userId)}catch(err){console.error("❌ DATA ERROR",err);await push(target,tagAnh("❌ DATA lỗi: "+String(err.message||err).slice(0,180),userId))}continue}}if(m.type==="file"){const name=String(m.fileName||"").toLowerCase();if(!/\.(xlsx|xls|csv)$/.test(name)){await reply(e.replyToken,tagAnh("⚠️ Chỉ nhận file Excel/CSV.",userId));continue}try{console.log("📎 FILE → Nhận:",m.fileName);const r=await fetch(DATA_API+"/message/"+encodeURIComponent(m.id)+"/content",{headers:{Authorization:"Bearer "+TOKEN}});if(!r.ok)throw new Error("LINE download "+r.status);const buf=Buffer.from(await r.arrayBuffer());if(laFileLichCa(buf)){await xuLyFileLichCa(buf,m.fileName,e.replyToken,userId);continue}const st=state();if(!st.active){await reply(e.replyToken,tagAnh("📥 Anh gõ NẠP DỮ LIỆU trước, rồi gửi 2 file Excel nhé.",userId));continue}const got=report.ingest(buf,m.fileName||("DATA_"+Date.now()+".xlsx"));console.log(`🔎 DATA CHECK → ${got.type} | đủ 2 file: ${got.ready}`);if(!got.ready){await reply(e.replyToken,tagAnh(`✅ Đã nhận file ${got.type==="store"?"DOANH THU SIÊU THỊ":"NGÀNH HÀNG"}\n\n📎 Còn thiếu 1 file nữa.`,userId));continue}if(!report.promote())throw new Error("Không lưu được đủ 2 file dữ liệu");await reply(e.replyToken,tagAnh("✅ ĐÃ NHẬN ĐỦ 2 FILE\n🔎 Đang kiểm tra số liệu...\n🔄 Đang tạo BC và lưu JSON lên Google Drive...",userId));await sendBC(target,userId);saveState({active:false,readyAt:new Date().toISOString()});console.log("✅ VALIDATION → Số liệu + BC đã lưu Drive")}catch(err){console.error("❌ FILE ERROR",err);await push(target,tagAnh("❌ Xử lý file lỗi: "+String(err.message||err).slice(0,180),userId))}}}});
 app.listen(PORT,()=>{console.log("NG-BOT READY PORT "+PORT);console.log("🎨 BC UI: GOOGLE DRIVE TEMPLATE");console.log("🕐 TIMEZONE:",meeting.TZ);setInterval(checkMeetingReminders,60000);checkMeetingReminders().catch(console.error)});
