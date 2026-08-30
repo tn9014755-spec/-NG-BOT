@@ -5,6 +5,7 @@ const {buildData}=require("./bc_report_adapter");
 const {downloadTemplate,applyTemplate,putJson,putLocalJson,readLocalJson,latestLocalJson,readJson,latestJson,hasDriveCredentials}=require("./bc_drive");
 const {buildBCFlex}=require("./bc-flex");
 const {createFreshAI}=require("./fresh_ai");
+const {buildFreshHtml}=require("./fresh_html");
 const app=express(),PORT=process.env.PORT||10000;
 const SECRET=process.env.LINE_CHANNEL_SECRET||process.env.LINE_SECRET||"",TOKEN=process.env.LINE_CHANNEL_ACCESS_TOKEN||process.env.LINE_ACCESS_TOKEN||"";
 const API="https://api.line.me/v2/bot",DATA_API="https://api-data.line.me/v2/bot",STATE=path.join(__dirname,"data","bc_report","session.json");
@@ -84,7 +85,7 @@ async function askGemini(userText,reportContext=""){
  }
  throw lastErr||new Error("Gemini không trả về nội dung");
 }
-const freshAI=createFreshAI({askAI:askGemini,dataDir:path.join(__dirname,"data","fresh_ai")});
+const freshAI=createFreshAI({askAI:askGemini,dataDir:"/tmp/fresh"});
 
 async function checkMeetingReminders(){for(const m of meeting.due()){console.log(`⏰ MEETING → Gửi nhắc: ${m.content} | ${m.date} ${m.hour}h${String(m.minute).padStart(2,"0")}`);const uid=m.userId||"";const ok=await push(m.target,tagAnh(`⏰ NHẮC LỊCH\n\n📝 ${m.content}\n🕐 ${String(m.hour).padStart(2,"0")}h${String(m.minute).padStart(2,"0")}\n📆 ${m.date}`,uid));if(!ok)console.warn(`⚠️ NHẮC LỊCH → LINE gửi thất bại: ${m.id}`)}}
 async function saveBCPersistence(name,data){try{putLocalJson(name,data)}catch(e){console.error(`❌ LOCAL BC WRITE ERROR → ${name}:`,e.message)}if(hasDriveCredentials()){Promise.resolve().then(()=>putJson(name,data)).catch(e=>console.warn(`⚠️ DRIVE BC WRITE FAILED → ${name}: ${e.message}`))}else console.log(`ℹ️ DRIVE BC BACKGROUND SKIP → chưa có Google credentials | ${name}`)}
@@ -105,6 +106,32 @@ app.get("/",(_,res)=>res.send("NG-BOT READY - NẠP DỮ LIỆU / DATA / LỊCH 
 app.get("/health",(_,res)=>res.json({ok:true,bot:"NG-BOT",token:!!TOKEN,secret:!!SECRET,timezone:meeting.TZ,meetings:meeting.list().length}));
 app.get("/bc/moi-nhat",async(_,res)=>{try{const local=latestLocalJson();if(local)return serveData(res,local.data);const x=await latestJson();await serveData(res,x&&x.data)}catch(e){console.error("❌ BC LATEST ERROR",e);noReport(res)}});
 app.get("/bc/:date",async(req,res)=>{const date=req.params.date;if(date==="moi-nhat")return res.redirect("/bc/moi-nhat");if(!validDate(date))return noReport(res);try{const local=readLocalJson(`bc-${date}.json`);if(local)return serveData(res,local);await serveData(res,await readJson(`bc-${date}.json`))}catch(e){console.error(`❌ BC ${date} ERROR`,e);noReport(res)}});
+function noFresh(res){
+  return res.status(404).type("html").send('<!doctype html><html lang="vi"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>BC FRESH</title><body style="font-family:Arial;background:#eef2ed;padding:30px"><div style="max-width:600px;margin:auto;background:#fff;border-radius:16px;padding:24px"><h2>Chưa có BC FRESH</h2><p>Anh gõ NẠP FRESH và gửi file Excel FRESH.</p></div></body></html>');
+}
+app.get("/fresh/moi-nhat",async(_,res)=>{
+  try{
+    const x=freshAI.getLatest();
+    if(!x)return noFresh(res);
+    res.type("html").send(buildFreshHtml(x.data));
+  }catch(e){
+    console.error("❌ FRESH LATEST ERROR",e);
+    noFresh(res);
+  }
+});
+app.get("/fresh/:date",async(req,res)=>{
+  const date=req.params.date;
+  if(date==="moi-nhat")return res.redirect("/fresh/moi-nhat");
+  if(!validDate(date))return noFresh(res);
+  try{
+    const x=freshAI.getByDate(date);
+    if(!x)return noFresh(res);
+    res.type("html").send(buildFreshHtml(x.data));
+  }catch(e){
+    console.error("❌ FRESH "+date+" ERROR",e);
+    noFresh(res);
+  }
+});
 app.get("/report.html",(_,res)=>res.redirect("/bc/moi-nhat"));
 function laFileLichCa(buf){try{const wb=XLSX.read(buf,{type:"buffer",cellDates:false});const ws=wb.Sheets[wb.SheetNames[0]];if(!ws)return false;const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:null});const dayRe=/\(\s*\d{1,2}\s*\/\s*\d{1,2}\s*\)/,caRe=/^ca\s*[1-6]$/i;let coNgay=false,coCa=false;for(let r=0;r<Math.min(rows.length,20);r++){const row=rows[r]||[];if(row.some(x=>dayRe.test(String(x??""))))coNgay=true;if(row.some(x=>caRe.test(String(x??""))))coCa=true;if(coNgay&&coCa)return true}return false}catch(e){console.warn("⚠️ Không kiểm tra được loại file lịch ca:",e.message);return false}}
 async function xuLyFileLichCa(buf,fileName,replyToken,userId){try{const wb=XLSX.read(buf,{type:"buffer"});const ws=wb.Sheets[wb.SheetNames[0]];if(!ws)throw new Error("File không có sheet đầu");const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:null});const lich=ca.docLichCa(rows);const kq=ca.luuLich(lich);console.log(`✅ LỊCH CA → ${fileName}: ${kq.soNgayMoi} ngày ${kq.tuNgay} → ${kq.denNgay}, tổng ${kq.soNgayTong}`);await reply(replyToken,tagAnh(`✅ ĐÃ NHẬN LỊCH CA\n📅 ${kq.soNgayMoi} ngày, từ ${kq.tuNgay} đến ${kq.denNgay}.\n📊 Tổng đang giữ ${kq.soNgayTong} ngày.`,userId));return true}catch(e){console.error("❌ LỊCH CA FILE ERROR",e);await reply(replyToken,tagAnh("❌ File lịch ca lỗi: "+String(e.message||e).slice(0,180),userId));return true}}
