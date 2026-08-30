@@ -184,7 +184,23 @@ if(t==="PING"){await reply(e.replyToken,{type:"text",text:"✅ BOT ĐÃ KẾT N�
 // 🌿 Lệnh FRESH phải nhận trực tiếp, không phụ thuộc tag khi chat riêng.
 if(freshAI.isFreshCommand(commandRaw)){try{const freshResult=await freshAI.handleText({text:commandRaw,userId});const freshMessages=(freshResult.messages||[]).map(x=>typeof x==="string"?tagAnh(x,userId):x);await reply(e.replyToken,freshMessages);continue}catch(err){console.error("❌ FRESH AI TEXT ERROR",err);await reply(e.replyToken,tagAnh("❌ FRESH AI lỗi: "+String(err.message||err).slice(0,180),userId));continue}}
 try{const freshResult=await freshAI.handleText({text:commandRaw,userId});if(freshResult.handled){const freshMessages=(freshResult.messages||[]).map(x=>typeof x==="string"?tagAnh(x,userId):x);await reply(e.replyToken,freshMessages);continue}}catch(err){console.error("❌ FRESH AI TEXT ERROR",err);await reply(e.replyToken,tagAnh("❌ FRESH AI lỗi: "+String(err.message||err).slice(0,180),userId));continue}
-if(!["BC","DATA","NAP DU LIEU"].includes(t)){if(!hasBotMention)continue;try{const reportData=latestReportContext();const reportContext=reportData||"";await reply(e.replyToken,tagAnh("🔎 Em đang đọc và phân tích BC cho anh, chờ em một chút...",userId));const ai=await askGemini(commandRaw,reportContext);const sent=await push(target,splitTextForLine(ai,userId));if(!sent)console.error("❌ Không push được kết quả AI")}catch(err){console.error("❌ GEMINI ERROR",err);await push(target,tagAnh("❌ AI chưa trả lời được: "+String(err.message||err).slice(0,180)+"\n\nAnh thử lại sau ít phút hoặc hỏi ngắn hơn nhé.",userId))}continue}if(t==="NAP DU LIEU"){report.resetPending();saveState({active:true,startedAt:new Date().toISOString()});console.log("📥 DATA SPECIALIST → Mở phiên NẠP DỮ LIỆU");await reply(e.replyToken,{type:"text",text:"📥 ĐÃ SẴN SÀNG NẠP DỮ LIỆU\n\nAnh gửi 2 file Excel.\nBot sẽ nhận đủ 2 file → kiểm tra số liệu → tạo BC và lưu Drive."});continue}if(t==="DATA"||t==="BC"){try{console.log("📊 DATA SPECIALIST → DATA/BC được yêu cầu");if(typeof report.promote==="function")report.promote();if(!report.hasData()){await reply(e.replyToken,{type:"text",text:"📭 Chưa có BC gần nhất. Anh gõ NẠP DỮ LIỆU và gửi 2 file."});continue}await sendBC(target,userId,e.replyToken)}catch(err){
+if(!["BC","DATA","NAP DU LIEU"].includes(t)){
+ if(!hasBotMention)continue;
+ try{
+  const reportContext=latestReportContext()||"";
+  // Không gửi tin "đang phân tích" trước: replyToken chỉ dùng được một lần.
+  // Chờ AI xong rồi trả lời trực tiếp bằng REPLY để không phụ thuộc quota PUSH.
+  console.log("🤖 AI STEP → BẮT ĐẦU phân tích");
+  const ai=await askGemini(commandRaw,reportContext);
+  console.log("🤖 AI STEP → XONG, gửi LINE REPLY");
+  const sent=await reply(e.replyToken,splitTextForLine(ai,userId));
+  if(!sent)console.error("❌ Không reply được kết quả AI");
+ }catch(err){
+  console.error("❌ GEMINI ERROR",err);
+  await reply(e.replyToken,tagAnh("❌ AI chưa trả lời được: "+String(err.message||err).slice(0,180)+"\n\nAnh thử lại sau ít phút hoặc hỏi ngắn hơn nhé.",userId));
+ }
+ continue
+}if(t==="NAP DU LIEU"){report.resetPending();saveState({active:true,startedAt:new Date().toISOString()});console.log("📥 DATA SPECIALIST → Mở phiên NẠP DỮ LIỆU");await reply(e.replyToken,{type:"text",text:"📥 ĐÃ SẴN SÀNG NẠP DỮ LIỆU\n\nAnh gửi 2 file Excel.\nBot sẽ nhận đủ 2 file → kiểm tra số liệu → tạo BC và lưu Drive."});continue}if(t==="DATA"||t==="BC"){try{console.log("📊 DATA SPECIALIST → DATA/BC được yêu cầu");if(typeof report.promote==="function")report.promote();if(!report.hasData()){await reply(e.replyToken,{type:"text",text:"📭 Chưa có BC gần nhất. Anh gõ NẠP DỮ LIỆU và gửi 2 file."});continue}await sendBC(target,userId,e.replyToken)}catch(err){
  console.error("❌ DATA ERROR",err);
  if(err&&err.bcStored){
   console.warn("⚠️ BC ĐÃ LƯU NHƯNG LINE KHÔNG GỬI ĐƯỢC");
