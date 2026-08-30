@@ -55,6 +55,8 @@ function createFreshAI(options={}){
     return best.index;
   }
 
+  function isFreshCommand(t){return OPEN.has(normalize(t));}
+
   function headerMap(headers){
     const m={};
     headers.forEach((v,i)=>{
@@ -248,7 +250,7 @@ function createFreshAI(options={}){
   async function handleText({text,userId}){
     const t=normalize(text);
     if(!t)return {handled:false,messages:[]};
-    if(OPEN.has(t)){
+    if(isFreshCommand(t)){
       sessions.set(userId,{startedAt:Date.now()});
       return {handled:true,messages:["🌿 ĐÃ MỞ PHIÊN NHẬN DATA FRESH\n\n📎 Anh gửi 1 file Excel FRESH ngay sau tin nhắn này.\n🔒 DATA FRESH cũ chỉ thay khi file mới đọc thành công."]};
     }
@@ -262,7 +264,7 @@ function createFreshAI(options={}){
     return {handled:false,messages:[]};
   }
 
-  return {handleText,handleFile,analyze,getLatest:read,hasLatest:()=>!!read(),overview};
+  return {handleText,handleFile,analyze,getLatest:read,hasLatest:()=>!!read(),overview,isFreshCommand};
 }
 
 module.exports={createFreshAI};
