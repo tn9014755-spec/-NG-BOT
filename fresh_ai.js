@@ -64,6 +64,22 @@ function createFreshAI(options={}){
     return normalize(text)==="BC FRESH";
   }
 
+  // Nhận câu hỏi tiếp nối về DATA FRESH dù người dùng không gõ chữ FRESH.
+  // Ví dụ: "Chi tiết nhóm rau", "Mã nào hao nhiều nhất", "Phân tích hao hụt".
+  function isFreshQuestion(text){
+    const t=normalize(text);
+    if(!t)return false;
+    if(t.includes("FRESH"))return true;
+
+    const keywords=[
+      "NHOM RAU","RAU CU","TRAI CAY","THIT","HAI SAN","THUY HAI SAN",
+      "HAO HUT","HAO NHIEU","MAT MAT","HUY TON","HUY HAO HUT NCC",
+      "MA NAO","SAN PHAM NAO","TOP HAO","CHI TIET NHOM",
+      "TI LE HAO","DOANH THU FRESH","KIEM KE","KIEM KE THUA"
+    ];
+    return keywords.some(k=>t.includes(k));
+  }
+
   async function handleFile({buffer,fileName,userId}){
     const active=sessions.has(userId);
     if(!laFileFresh(buffer)){
@@ -108,7 +124,7 @@ function createFreshAI(options={}){
       return {handled:true,messages:[payload?buildFreshFlex(payload.data):"📭 Chưa có BC FRESH. Anh gõ NẠP FRESH và gửi file."]};
     }
 
-    if(t.includes("FRESH")){
+    if(isFreshQuestion(text)){
       const payload=getLatest();
       if(!payload)return {handled:true,messages:["📭 Chưa có BC FRESH. Anh gõ NẠP FRESH và gửi file."]};
       const answer=await analyze(text);
@@ -127,6 +143,7 @@ function createFreshAI(options={}){
     hasLatest,
     isFreshCommand,
     isFreshView,
+    isFreshQuestion,
     dataDir
   };
 }
