@@ -103,16 +103,10 @@ async function buildAndStore(){
  await saveBCPersistence(name,data);
  bcStep("XONG lưu JSON",start);
 
- // Template chỉ cần cho trang HTML; không để lỗi tải template chặn thẻ BC.
- let html="";
- try{
-  bcStep("BẮT ĐẦU tải template",start);
-  const template=await downloadTemplate();
-  html=applyTemplate(template,data);
-  bcStep("XONG template",start);
- }catch(e){
-  console.error("⚠️ BC TEMPLATE ERROR → JSON đã lưu, Flex vẫn gửi:",e.message);
- }
+ // Không tải template ở luồng gửi LINE.
+ // Trang HTML sẽ tải template khi người dùng bấm mở trang, tránh BC bị nghẽn vì mạng/Google Drive.
+ const html="";
+ bcStep("BỎ QUA template khi gửi BC",start);
 
  const prev=state();
  saveState({...prev,lastReportData:data,lastReportDate:date,lastReportType:"BC SỨC KHỎE",lastReportSavedAt:new Date().toISOString()});
@@ -188,7 +182,7 @@ if(t==="PING"){await reply(e.replyToken,{type:"text",text:"✅ BOT ĐÃ KẾT N�
 // 🌿 Lệnh FRESH phải nhận trực tiếp, không phụ thuộc tag khi chat riêng.
 if(freshAI.isFreshCommand(commandRaw)){try{const freshResult=await freshAI.handleText({text:commandRaw,userId});const freshMessages=(freshResult.messages||[]).map(x=>typeof x==="string"?tagAnh(x,userId):x);await reply(e.replyToken,freshMessages);continue}catch(err){console.error("❌ FRESH AI TEXT ERROR",err);await reply(e.replyToken,tagAnh("❌ FRESH AI lỗi: "+String(err.message||err).slice(0,180),userId));continue}}
 try{const freshResult=await freshAI.handleText({text:commandRaw,userId});if(freshResult.handled){const freshMessages=(freshResult.messages||[]).map(x=>typeof x==="string"?tagAnh(x,userId):x);await reply(e.replyToken,freshMessages);continue}}catch(err){console.error("❌ FRESH AI TEXT ERROR",err);await reply(e.replyToken,tagAnh("❌ FRESH AI lỗi: "+String(err.message||err).slice(0,180),userId));continue}
-if(!["BC","DATA","NẠP DỮ LIỆU","NAP DU LIEU"].includes(t)){if(!hasBotMention)continue;try{const reportData=latestReportContext();const reportContext=reportData||"";await reply(e.replyToken,tagAnh("🔎 Em đang đọc và phân tích BC cho anh, chờ em một chút...",userId));const ai=await askGemini(commandRaw,reportContext);const sent=await push(target,splitTextForLine(ai,userId));if(!sent)console.error("❌ Không push được kết quả AI")}catch(err){console.error("❌ GEMINI ERROR",err);await push(target,tagAnh("❌ AI chưa trả lời được: "+String(err.message||err).slice(0,180)+"\n\nAnh thử lại sau ít phút hoặc hỏi ngắn hơn nhé.",userId))}continue}if(t==="NẠP DỮ LIỆU"||t==="NAP DU LIEU"){report.resetPending();saveState({active:true,startedAt:new Date().toISOString()});console.log("📥 DATA SPECIALIST → Mở phiên NẠP DỮ LIỆU");await reply(e.replyToken,{type:"text",text:"📥 ĐÃ SẴN SÀNG NẠP DỮ LIỆU\n\nAnh gửi 2 file Excel.\nBot sẽ nhận đủ 2 file → kiểm tra số liệu → tạo BC và lưu Drive."});continue}if(t==="DATA"||t==="BC"){try{console.log("📊 DATA SPECIALIST → DATA/BC được yêu cầu");if(typeof report.promote==="function")report.promote();if(!report.hasData()){await reply(e.replyToken,{type:"text",text:"📭 Chưa có BC gần nhất. Anh gõ NẠP DỮ LIỆU và gửi 2 file."});continue}await reply(e.replyToken,{type:"text",text:"🔄 Đang kiểm tra số liệu và tạo BC SỨC KHỎE..."});await sendBC(target,userId)}catch(err){
+if(!["BC","DATA","NAP DU LIEU"].includes(t)){if(!hasBotMention)continue;try{const reportData=latestReportContext();const reportContext=reportData||"";await reply(e.replyToken,tagAnh("🔎 Em đang đọc và phân tích BC cho anh, chờ em một chút...",userId));const ai=await askGemini(commandRaw,reportContext);const sent=await push(target,splitTextForLine(ai,userId));if(!sent)console.error("❌ Không push được kết quả AI")}catch(err){console.error("❌ GEMINI ERROR",err);await push(target,tagAnh("❌ AI chưa trả lời được: "+String(err.message||err).slice(0,180)+"\n\nAnh thử lại sau ít phút hoặc hỏi ngắn hơn nhé.",userId))}continue}if(t==="NAP DU LIEU"){report.resetPending();saveState({active:true,startedAt:new Date().toISOString()});console.log("📥 DATA SPECIALIST → Mở phiên NẠP DỮ LIỆU");await reply(e.replyToken,{type:"text",text:"📥 ĐÃ SẴN SÀNG NẠP DỮ LIỆU\n\nAnh gửi 2 file Excel.\nBot sẽ nhận đủ 2 file → kiểm tra số liệu → tạo BC và lưu Drive."});continue}if(t==="DATA"||t==="BC"){try{console.log("📊 DATA SPECIALIST → DATA/BC được yêu cầu");if(typeof report.promote==="function")report.promote();if(!report.hasData()){await reply(e.replyToken,{type:"text",text:"📭 Chưa có BC gần nhất. Anh gõ NẠP DỮ LIỆU và gửi 2 file."});continue}await reply(e.replyToken,{type:"text",text:"🔄 Đang kiểm tra số liệu và tạo BC SỨC KHỎE..."});await sendBC(target,userId)}catch(err){
  console.error("❌ DATA ERROR",err);
  if(err&&err.bcStored){
   console.warn("⚠️ BC ĐÃ LƯU NHƯNG LINE KHÔNG GỬI ĐƯỢC");
@@ -203,5 +197,5 @@ if(!["BC","DATA","NẠP DỮ LIỆU","NAP DU LIEU"].includes(t)){if(!hasBotMenti
   await push(target,tagAnh("❌ Xử lý file lỗi: "+String(err.message||err).slice(0,180),userId));
  }
 }}}});
-app.listen(PORT,()=>{console.log("NG-BOT READY PORT "+PORT);console.log("🎨 BC UI: GOOGLE DRIVE TEMPLATE");console.log("🕐 TIMEZONE:",meeting.TZ);console.log("🤖 GEMINI:",GEMINI_MODEL,"| API KEY:",GEMINI_KEY?"OK":"MISSING");setInterval(checkMeetingReminders,60000);checkMeetingReminders().catch(console.error)});
+app.listen(PORT,()=>{console.log("NG-BOT READY PORT "+PORT);console.log("⚡ BC HOT PATH: buildData → lưu JSON → Flex → LINE (không tải template trước khi gửi)");console.log("🎨 BC UI: GOOGLE DRIVE TEMPLATE");console.log("🕐 TIMEZONE:",meeting.TZ);console.log("🤖 GEMINI:",GEMINI_MODEL,"| API KEY:",GEMINI_KEY?"OK":"MISSING");setInterval(checkMeetingReminders,60000);checkMeetingReminders().catch(console.error)});
                                                                                                
