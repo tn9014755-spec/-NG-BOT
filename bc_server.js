@@ -89,13 +89,51 @@ const freshAI=createFreshAI({askAI:askGemini,dataDir:"/tmp/fresh"});
 
 async function checkMeetingReminders(){for(const m of meeting.due()){console.log(`⏰ MEETING → Gửi nhắc: ${m.content} | ${m.date} ${m.hour}h${String(m.minute).padStart(2,"0")}`);const uid=m.userId||"";const ok=await push(m.target,tagAnh(`⏰ NHẮC LỊCH\n\n📝 ${m.content}\n🕐 ${String(m.hour).padStart(2,"0")}h${String(m.minute).padStart(2,"0")}\n📆 ${m.date}`,uid));if(!ok)console.warn(`⚠️ NHẮC LỊCH → LINE gửi thất bại: ${m.id}`)}}
 async function saveBCPersistence(name,data){try{putLocalJson(name,data)}catch(e){console.error(`❌ LOCAL BC WRITE ERROR → ${name}:`,e.message)}if(hasDriveCredentials()){Promise.resolve().then(()=>putJson(name,data)).catch(e=>console.warn(`⚠️ DRIVE BC WRITE FAILED → ${name}: ${e.message}`))}else console.log(`ℹ️ DRIVE BC BACKGROUND SKIP → chưa có Google credentials | ${name}`)}
-async function buildAndStore(){const data=buildData(),date=String(data.ngay.nhan).split("/").reverse().join("-"),name=`bc-${date}.json`,template=await downloadTemplate();await saveBCPersistence(name,data);return{data,date,html:applyTemplate(template,data)}}
-async function sendBC(target,userId){
- const out=await buildAndStore();
- const ok=await push(target,[tagAnh("✅ BC SỨC KHỎE ĐÃ XONG",userId),buildBCFlex(out.data)]);
- if(!ok)throw new Error("LINE PUSH BC thất bại");
+function bcStep(label,start){console.log(`📊 BC STEP → ${label} | +${Date.now()-start}ms`)}
+async function buildAndStore(){
+ const start=Date.now();
+ bcStep("BẮT ĐẦU buildData",start);
+ const data=buildData();
+ bcStep("XONG buildData",start);
+ const date=String(data.ngay.nhan).split("/").reverse().join("-");
+ const name=`bc-${date}.json`;
+
+ // Lưu dữ liệu trước. LINE hoặc template lỗi cũng không làm mất BC đã tính xong.
+ bcStep("BẮT ĐẦU lưu JSON",start);
+ await saveBCPersistence(name,data);
+ bcStep("XONG lưu JSON",start);
+
+ // Template chỉ cần cho trang HTML; không để lỗi tải template chặn thẻ BC.
+ let html="";
+ try{
+  bcStep("BẮT ĐẦU tải template",start);
+  const template=await downloadTemplate();
+  html=applyTemplate(template,data);
+  bcStep("XONG template",start);
+ }catch(e){
+  console.error("⚠️ BC TEMPLATE ERROR → JSON đã lưu, Flex vẫn gửi:",e.message);
+ }
+
  const prev=state();
- saveState({...prev,lastReportData:out.data,lastReportDate:out.date,lastReportType:"BC SỨC KHỎE",lastReportSavedAt:new Date().toISOString()});
+ saveState({...prev,lastReportData:data,lastReportDate:date,lastReportType:"BC SỨC KHỎE",lastReportSavedAt:new Date().toISOString()});
+ bcStep("HOÀN TẤT dựng BC",start);
+ return{data,date,html}
+}
+async function sendBC(target,userId){
+ const start=Date.now();
+ const out=await buildAndStore();
+ bcStep("BẮT ĐẦU dựng Flex",start);
+ const card=buildBCFlex(out.data);
+ bcStep("BẮT ĐẦU PUSH LINE",start);
+
+ // Chỉ gửi 1 thẻ để giảm quota. BC đã được lưu trước khi PUSH.
+ const ok=await push(target,card);
+ bcStep(ok?"PUSH LINE THÀNH CÔNG":"PUSH LINE THẤT BẠI",start);
+ if(!ok){
+  const err=new Error("LINE PUSH BC thất bại (BC đã được lưu, có thể xem lại khi quota LINE hoạt động)");
+  err.bcStored=true;
+  throw err;
+ }
  return out
 }
 function noReport(res){return res.status(404).type("html").send(`<!doctype html><html lang="vi"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>BC SỨC KHỎE</title><body style="font-family:Arial;background:#eef3f8;padding:30px"><div style="max-width:600px;margin:auto;background:#fff;border-radius:16px;padding:24px"><h2>Chưa có báo cáo</h2><p>Chưa có báo cáo cho ngày này.</p></div></body></html>`)}
@@ -150,6 +188,20 @@ if(t==="PING"){await reply(e.replyToken,{type:"text",text:"✅ BOT ĐÃ KẾT N�
 // 🌿 Lệnh FRESH phải nhận trực tiếp, không phụ thuộc tag khi chat riêng.
 if(freshAI.isFreshCommand(commandRaw)){try{const freshResult=await freshAI.handleText({text:commandRaw,userId});const freshMessages=(freshResult.messages||[]).map(x=>typeof x==="string"?tagAnh(x,userId):x);await reply(e.replyToken,freshMessages);continue}catch(err){console.error("❌ FRESH AI TEXT ERROR",err);await reply(e.replyToken,tagAnh("❌ FRESH AI lỗi: "+String(err.message||err).slice(0,180),userId));continue}}
 try{const freshResult=await freshAI.handleText({text:commandRaw,userId});if(freshResult.handled){const freshMessages=(freshResult.messages||[]).map(x=>typeof x==="string"?tagAnh(x,userId):x);await reply(e.replyToken,freshMessages);continue}}catch(err){console.error("❌ FRESH AI TEXT ERROR",err);await reply(e.replyToken,tagAnh("❌ FRESH AI lỗi: "+String(err.message||err).slice(0,180),userId));continue}
-if(!["BC","DATA","NẠP DỮ LIỆU","NAP DU LIEU"].includes(t)){if(!hasBotMention)continue;try{const reportData=latestReportContext();const reportContext=reportData||"";await reply(e.replyToken,tagAnh("🔎 Em đang đọc và phân tích BC cho anh, chờ em một chút...",userId));const ai=await askGemini(commandRaw,reportContext);const sent=await push(target,splitTextForLine(ai,userId));if(!sent)console.error("❌ Không push được kết quả AI")}catch(err){console.error("❌ GEMINI ERROR",err);await push(target,tagAnh("❌ AI chưa trả lời được: "+String(err.message||err).slice(0,180)+"\n\nAnh thử lại sau ít phút hoặc hỏi ngắn hơn nhé.",userId))}continue}if(t==="NẠP DỮ LIỆU"||t==="NAP DU LIEU"){report.resetPending();saveState({active:true,startedAt:new Date().toISOString()});console.log("📥 DATA SPECIALIST → Mở phiên NẠP DỮ LIỆU");await reply(e.replyToken,{type:"text",text:"📥 ĐÃ SẴN SÀNG NẠP DỮ LIỆU\n\nAnh gửi 2 file Excel.\nBot sẽ nhận đủ 2 file → kiểm tra số liệu → tạo BC và lưu Drive."});continue}if(t==="DATA"||t==="BC"){try{console.log("📊 DATA SPECIALIST → DATA/BC được yêu cầu");if(typeof report.promote==="function")report.promote();if(!report.hasData()){await reply(e.replyToken,{type:"text",text:"📭 Chưa có BC gần nhất. Anh gõ NẠP DỮ LIỆU và gửi 2 file."});continue}await reply(e.replyToken,{type:"text",text:"🔄 Đang kiểm tra số liệu và tạo BC SỨC KHỎE..."});await sendBC(target,userId)}catch(err){console.error("❌ DATA ERROR",err);await push(target,tagAnh("❌ DATA lỗi: "+String(err.message||err).slice(0,180),userId))}continue}}if(m.type==="file"){const name=String(m.fileName||"").toLowerCase();if(!/\.(xlsx|xls|csv)$/.test(name)){await reply(e.replyToken,tagAnh("⚠️ Chỉ nhận file Excel/CSV.",userId));continue}try{console.log("📎 FILE → Nhận:",m.fileName);const r=await fetch(DATA_API+"/message/"+encodeURIComponent(m.id)+"/content",{headers:{Authorization:"Bearer "+TOKEN}});if(!r.ok)throw new Error("LINE download "+r.status);const buf=Buffer.from(await r.arrayBuffer());if(laFileLichCa(buf)){await xuLyFileLichCa(buf,m.fileName,e.replyToken,userId);continue}const freshFileResult=await freshAI.handleFile({buffer:buf,fileName:m.fileName,userId});if(freshFileResult.handled){const freshMessages=(freshFileResult.messages||[]).map(x=>typeof x==="string"?tagAnh(x,userId):x);await reply(e.replyToken,freshMessages);continue}const st=state();if(!st.active){await reply(e.replyToken,tagAnh("📥 Anh gõ NẠP DỮ LIỆU trước, rồi gửi 2 file Excel nhé.",userId));continue}const got=report.ingest(buf,m.fileName||("DATA_"+Date.now()+".xlsx"));console.log(`🔎 DATA CHECK → ${got.type} | đủ 2 file: ${got.ready}`);if(!got.ready){await reply(e.replyToken,tagAnh(`✅ Đã nhận file ${got.type==="store"?"DOANH THU SIÊU THỊ":"NGÀNH HÀNG"}\n\n📎 Còn thiếu 1 file nữa.`,userId));continue}if(!report.promote())throw new Error("Không lưu được đủ 2 file dữ liệu");await reply(e.replyToken,tagAnh("✅ ĐÃ NHẬN ĐỦ 2 FILE\n🔎 Đang kiểm tra số liệu...\n🔄 Đang tạo BC và lưu JSON lên Google Drive...",userId));await sendBC(target,userId);const prevState=state();saveState({...prevState,active:false,readyAt:new Date().toISOString()});console.log("✅ VALIDATION → Số liệu + BC đã lưu Drive")}catch(err){console.error("❌ FILE ERROR",err);await push(target,tagAnh("❌ Xử lý file lỗi: "+String(err.message||err).slice(0,180),userId))}}}});
+if(!["BC","DATA","NẠP DỮ LIỆU","NAP DU LIEU"].includes(t)){if(!hasBotMention)continue;try{const reportData=latestReportContext();const reportContext=reportData||"";await reply(e.replyToken,tagAnh("🔎 Em đang đọc và phân tích BC cho anh, chờ em một chút...",userId));const ai=await askGemini(commandRaw,reportContext);const sent=await push(target,splitTextForLine(ai,userId));if(!sent)console.error("❌ Không push được kết quả AI")}catch(err){console.error("❌ GEMINI ERROR",err);await push(target,tagAnh("❌ AI chưa trả lời được: "+String(err.message||err).slice(0,180)+"\n\nAnh thử lại sau ít phút hoặc hỏi ngắn hơn nhé.",userId))}continue}if(t==="NẠP DỮ LIỆU"||t==="NAP DU LIEU"){report.resetPending();saveState({active:true,startedAt:new Date().toISOString()});console.log("📥 DATA SPECIALIST → Mở phiên NẠP DỮ LIỆU");await reply(e.replyToken,{type:"text",text:"📥 ĐÃ SẴN SÀNG NẠP DỮ LIỆU\n\nAnh gửi 2 file Excel.\nBot sẽ nhận đủ 2 file → kiểm tra số liệu → tạo BC và lưu Drive."});continue}if(t==="DATA"||t==="BC"){try{console.log("📊 DATA SPECIALIST → DATA/BC được yêu cầu");if(typeof report.promote==="function")report.promote();if(!report.hasData()){await reply(e.replyToken,{type:"text",text:"📭 Chưa có BC gần nhất. Anh gõ NẠP DỮ LIỆU và gửi 2 file."});continue}await reply(e.replyToken,{type:"text",text:"🔄 Đang kiểm tra số liệu và tạo BC SỨC KHỎE..."});await sendBC(target,userId)}catch(err){
+ console.error("❌ DATA ERROR",err);
+ if(err&&err.bcStored){
+  console.warn("⚠️ BC ĐÃ LƯU NHƯNG LINE KHÔNG GỬI ĐƯỢC");
+ }else{
+  await push(target,tagAnh("❌ DATA lỗi: "+String(err.message||err).slice(0,180),userId));
+ }
+}continue}}if(m.type==="file"){const name=String(m.fileName||"").toLowerCase();if(!/\.(xlsx|xls|csv)$/.test(name)){await reply(e.replyToken,tagAnh("⚠️ Chỉ nhận file Excel/CSV.",userId));continue}try{console.log("📎 FILE → Nhận:",m.fileName);const r=await fetch(DATA_API+"/message/"+encodeURIComponent(m.id)+"/content",{headers:{Authorization:"Bearer "+TOKEN}});if(!r.ok)throw new Error("LINE download "+r.status);const buf=Buffer.from(await r.arrayBuffer());if(laFileLichCa(buf)){await xuLyFileLichCa(buf,m.fileName,e.replyToken,userId);continue}const freshFileResult=await freshAI.handleFile({buffer:buf,fileName:m.fileName,userId});if(freshFileResult.handled){const freshMessages=(freshFileResult.messages||[]).map(x=>typeof x==="string"?tagAnh(x,userId):x);await reply(e.replyToken,freshMessages);continue}const st=state();if(!st.active){await reply(e.replyToken,tagAnh("📥 Anh gõ NẠP DỮ LIỆU trước, rồi gửi 2 file Excel nhé.",userId));continue}const got=report.ingest(buf,m.fileName||("DATA_"+Date.now()+".xlsx"));console.log(`🔎 DATA CHECK → ${got.type} | đủ 2 file: ${got.ready}`);if(!got.ready){await reply(e.replyToken,tagAnh(`✅ Đã nhận file ${got.type==="store"?"DOANH THU SIÊU THỊ":"NGÀNH HÀNG"}\n\n📎 Còn thiếu 1 file nữa.`,userId));continue}if(!report.promote())throw new Error("Không lưu được đủ 2 file dữ liệu");await reply(e.replyToken,tagAnh("✅ ĐÃ NHẬN ĐỦ 2 FILE\n🔎 Đang kiểm tra số liệu...\n🔄 Đang tạo BC và lưu JSON lên Google Drive...",userId));await sendBC(target,userId);const prevState=state();saveState({...prevState,active:false,readyAt:new Date().toISOString()});console.log("✅ VALIDATION → Số liệu + BC đã lưu Drive")}catch(err){
+ console.error("❌ FILE ERROR",err);
+ if(err&&err.bcStored){
+  console.warn("⚠️ FILE → BC ĐÃ LƯU NHƯNG LINE KHÔNG GỬI ĐƯỢC");
+ }else{
+  await push(target,tagAnh("❌ Xử lý file lỗi: "+String(err.message||err).slice(0,180),userId));
+ }
+}}}});
 app.listen(PORT,()=>{console.log("NG-BOT READY PORT "+PORT);console.log("🎨 BC UI: GOOGLE DRIVE TEMPLATE");console.log("🕐 TIMEZONE:",meeting.TZ);console.log("🤖 GEMINI:",GEMINI_MODEL,"| API KEY:",GEMINI_KEY?"OK":"MISSING");setInterval(checkMeetingReminders,60000);checkMeetingReminders().catch(console.error)});
                                                                                                
