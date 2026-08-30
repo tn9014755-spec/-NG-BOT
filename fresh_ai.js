@@ -196,9 +196,7 @@ function createFreshAI(options={}){
       "",
       "💰 Doanh thu FRESH: "+vnd(t.revenue),
       "🔴 Hao hụt ước tính: "+vnd(t.estimatedLoss),
-      "📉 Tỷ lệ hao hụt: "+Number(t.lossPct||0).toFixed(2)+"%",
-      "",
-      "💬 Anh có thể hỏi: PHÂN TÍCH FRESH, MÃ NÀO HAO NHIỀU NHẤT, hoặc hỏi trực tiếp về FRESH."
+      "📉 Tỷ lệ hao hụt: "+Number(t.lossPct||0).toFixed(2)+"%"
     ].join("\n");
   }
 
