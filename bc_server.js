@@ -1,6 +1,32 @@
 const express=require("express"),crypto=require("crypto"),fs=require("fs"),path=require("path");
 const report=require("./bc_report"),meeting=require("./meeting_reminder"),ca=require("./ca-hom-nay");
 const XLSX=require("xlsx");
+function mauNenCell(wb,cell){
+ try{
+  if(!cell)return "";
+  const direct=cell.s&&typeof cell.s==="object"?(cell.s.fill?.fgColor?.rgb||cell.s.fill?.bgColor?.rgb||cell.s.fgColor?.rgb):"";
+  if(direct)return String(direct);
+  const styleId=typeof cell.s==="number"?cell.s:null;
+  if(styleId===null)return "";
+  const styles=wb.Styles||{};
+  const xfs=styles.CellXf||styles.CellXfs||styles.CellXFS||[];
+  const xf=xfs[styleId]||{};
+  const fills=styles.Fills||styles.fills||[];
+  const fill=fills[xf.fillId];
+  return String(fill?.fgColor?.rgb||fill?.bgColor?.rgb||"");
+ }catch{return ""}
+}
+function maTranMauLich(wb,ws){
+ const range=XLSX.utils.decode_range(ws["!ref"]||"A1:A1"),out=[];
+ for(let r=range.s.r;r<=range.e.r;r++){
+  out[r]=[];
+  for(let c=range.s.c;c<=range.e.c;c++){
+   const cell=ws[XLSX.utils.encode_cell({r,c})];
+   out[r][c]=mauNenCell(wb,cell);
+  }
+ }
+ return out;
+}
 const {buildData}=require("./bc_report_adapter");
 const {downloadTemplate,applyTemplate,putJson,putLocalJson,readLocalJson,latestLocalJson,readJson,latestJson,hasDriveCredentials}=require("./bc_drive");
 const {buildBCFlex}=require("./bc-flex");
@@ -168,7 +194,18 @@ app.get("/fresh/:date",async(req,res)=>{
 });
 app.get("/report.html",(_,res)=>res.redirect("/bc/moi-nhat"));
 function laFileLichCa(buf){try{const wb=XLSX.read(buf,{type:"buffer",cellDates:false});const ws=wb.Sheets[wb.SheetNames[0]];if(!ws)return false;const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:null});const dayRe=/\(\s*\d{1,2}\s*\/\s*\d{1,2}\s*\)/,caRe=/^ca\s*[1-6]$/i;let coNgay=false,coCa=false;for(let r=0;r<Math.min(rows.length,20);r++){const row=rows[r]||[];if(row.some(x=>dayRe.test(String(x??""))))coNgay=true;if(row.some(x=>caRe.test(String(x??""))))coCa=true;if(coNgay&&coCa)return true}return false}catch(e){console.warn("⚠️ Không kiểm tra được loại file lịch ca:",e.message);return false}}
-async function xuLyFileLichCa(buf,fileName,replyToken,userId){try{const wb=XLSX.read(buf,{type:"buffer"});const ws=wb.Sheets[wb.SheetNames[0]];if(!ws)throw new Error("File không có sheet đầu");const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:null});const lich=ca.docLichCa(rows);const kq=ca.luuLich(lich);console.log(`✅ LỊCH CA → ${fileName}: ${kq.soNgayMoi} ngày ${kq.tuNgay} → ${kq.denNgay}, tổng ${kq.soNgayTong}`);await reply(replyToken,tagAnh(`✅ ĐÃ NHẬN LỊCH CA\n📅 ${kq.soNgayMoi} ngày, từ ${kq.tuNgay} đến ${kq.denNgay}.\n📊 Tổng đang giữ ${kq.soNgayTong} ngày.`,userId));return true}catch(e){console.error("❌ LỊCH CA FILE ERROR",e);await reply(replyToken,tagAnh("❌ File lịch ca lỗi: "+String(e.message||e).slice(0,180),userId));return true}}
+async function xuLyFileLichCa(buf,fileName,replyToken,userId){try{
+ const wb=XLSX.read(buf,{type:"buffer",cellStyles:true});
+ const ws=wb.Sheets[wb.SheetNames[0]];
+ if(!ws)throw new Error("File không có sheet đầu");
+ const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:null});
+ const mau=maTranMauLich(wb,ws);
+ const lich=ca.docLichCa(rows,undefined,mau);
+ const kq=ca.luuLich(lich);
+ console.log(`✅ LỊCH CA → ${fileName}: ${kq.soNgayMoi} ngày ${kq.tuNgay} → ${kq.denNgay}, tổng ${kq.soNgayTong} (đã đọc màu vị trí)`);
+ await reply(replyToken,tagAnh(`✅ ĐÃ NHẬN LỊCH CA\n📅 ${kq.soNgayMoi} ngày, từ ${kq.tuNgay} đến ${kq.denNgay}.\n📊 Tổng đang giữ ${kq.soNgayTong} ngày.\n🎨 Đã đọc vị trí theo màu: KHO / THU NGÂN + FRESH PHỤ / FRESH.`,userId));
+ return true;
+}catch(e){console.error("❌ LỊCH CA FILE ERROR",e);await reply(replyToken,tagAnh("❌ File lịch ca lỗi: "+String(e.message||e).slice(0,180),userId));return true}}
 function ngayTheoLenhCa(t,d){const now=new Date();if(t==="CA HOM NAY")return new Date(now.getFullYear(),now.getMonth(),now.getDate());if(t==="CA MAI"){const x=new Date(now.getFullYear(),now.getMonth(),now.getDate());x.setDate(x.getDate()+1);return x}const m=t.match(/^CA\s+(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{4}))?$/);if(!m)return null;return new Date(Number(m[3]||now.getFullYear()),Number(m[2])-1,Number(m[1]))}
 app.post("/webhook",async(req,res)=>{const b=req.rawBody||Buffer.from(JSON.stringify(req.body||{})),sig=req.get("x-line-signature")||"";if(SECRET){const h=crypto.createHmac("sha256",SECRET).update(b).digest("base64");if(!sig||sig.length!==h.length||!crypto.timingSafeEqual(Buffer.from(sig),Buffer.from(h)))return res.status(401).send("invalid signature")}res.status(200).send("OK");if(!TOKEN)return;for(const e of req.body?.events||[]){if(!e.replyToken||e.mode==="standby")continue;const target=e.source?.groupId||e.source?.roomId||e.source?.userId||"",userId=e.source?.userId||"",m=e.message||{};if(m.type==="text"){const raw=String(m.text||"").trim();
 const isGroup=!!(e.source?.groupId||e.source?.roomId);
