@@ -62,7 +62,9 @@ function theCaNgay(lich,ngay){
   for(const [title,cas,color,bg] of groups){
     const people=Object.entries(day).map(([name,shifts])=>{
       const ca=cas.filter(c=>shifts&&Object.prototype.hasOwnProperty.call(shifts,c));
-      const viTri=[...new Set(ca.map(c=>typeof shifts[c]==='object'?shifts[c].viTri:'').filter(Boolean))];
+      let viTri=[...new Set(ca.map(c=>typeof shifts[c]==='object'?shifts[c].viTri:'').filter(Boolean))];
+      // Theo quy tắc lịch thực tế: ca chiều (4-6) không hiển thị vị trí KHO.
+      if(cas[0]===4)viTri=viTri.filter(v=>v!=='KHO');
       return{name,ca,viTri};
     }).filter(x=>x.ca.length);
     const rows=people.map(x=>({type:'text',text:`${x.name} — CA ${x.ca.join('')}${x.viTri.length?' | Vị trí: '+x.viTri.join(', '):''}`,size:'sm',wrap:true,color:'#334155',margin:'sm'}));
