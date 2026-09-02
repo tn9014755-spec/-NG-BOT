@@ -7,7 +7,15 @@ const laNgay=o=>/\(\s*\d{1,2}\s*\/\s*\d{1,2}\s*\)/.test(text(o));
 const laCa=o=>/^ca\s*[1-6]$/i.test(text(o));
 const coCa=v=>{if(v===null||v===undefined)return false;if(typeof v==='number')return Number.isFinite(v)&&v>0;const s=text(v).toLowerCase();if(!s||s==='0'||s==='-'||s==='—'||s==='–')return false;const n=Number(s.replace(',','.'));return Number.isFinite(n)?n>0:true};
 const giaTri=v=>{if(typeof v==='number'&&Number.isFinite(v)&&v>0)return v;const n=Number(text(v).replace(',','.'));return Number.isFinite(n)&&n>0?n:1};
-function docLichCa(rows,nam){
+const mauHex=v=>String(v?.rgb||v?.fgColor?.rgb||v||'').replace(/^#/,'').toUpperCase().slice(-6);
+function viTriTheoMau(v){
+ const m=mauHex(v);
+ if(m==='FFD966')return 'KHO';
+ if(m==='76D7C4')return 'THU NGÂN + FRESH PHỤ';
+ if(m==='92D050')return 'FRESH';
+ return '';
+}
+function docLichCa(rows,nam,styles){
   const year=nam||new Date().getFullYear();
   let dongNgay=-1,max=0;
   for(let r=0;r<Math.min(rows.length,25);r++){const n=(rows[r]||[]).filter(laNgay).length;if(n>max){max=n;dongNgay=r}}
@@ -34,7 +42,7 @@ function docLichCa(rows,nam){
       const row=rows[r]||[],name=text(row[cotTen]);
       if(!name||/^h[ọo]\s*t[êe]n$/i.test(name))continue;
       const shifts={};
-      for(let ca=1;ca<=6;ca++){const c=cols[ca];if(c!==undefined&&coCa(row[c]))shifts[ca]=giaTri(row[c])}
+      for(let ca=1;ca<=6;ca++){const c=cols[ca];if(c!==undefined&&coCa(row[c])){const viTri=viTriTheoMau(styles?.[r]?.[c]);shifts[ca]=viTri?{giaTri:giaTri(row[c]),viTri}:giaTri(row[c])}}
       if(Object.keys(shifts).length){
         const day=out[key]||(out[key]={});
         day[name]=Object.assign({},day[name]||{},shifts);
@@ -52,10 +60,14 @@ function theCaNgay(lich,ngay){
   const groups=[['🌅 CA SÁNG',[1,2,3],'#1d4ed8','#eff5ff'],['🌆 CA CHIỀU',[4,5,6],'#0f9d58','#f0fdf4']];
   const blocks=[];
   for(const [title,cas,color,bg] of groups){
-    const people=Object.entries(day).map(([name,shifts])=>({name,ca:cas.filter(c=>shifts&&Object.prototype.hasOwnProperty.call(shifts,c))})).filter(x=>x.ca.length);
-    const rows=people.map(x=>({type:'text',text:`${x.name} — CA ${x.ca.join('')}`,size:'sm',wrap:true,color:'#334155',margin:'sm'}));
+    const people=Object.entries(day).map(([name,shifts])=>{
+      const ca=cas.filter(c=>shifts&&Object.prototype.hasOwnProperty.call(shifts,c));
+      const viTri=[...new Set(ca.map(c=>typeof shifts[c]==='object'?shifts[c].viTri:'').filter(Boolean))];
+      return{name,ca,viTri};
+    }).filter(x=>x.ca.length);
+    const rows=people.map(x=>({type:'text',text:`${x.name} — CA ${x.ca.join('')}${x.viTri.length?' | Vị trí: '+x.viTri.join(', '):''}`,size:'sm',wrap:true,color:'#334155',margin:'sm'}));
     blocks.push({type:'box',layout:'vertical',backgroundColor:bg,cornerRadius:'10px',paddingAll:'12px',margin:'md',contents:[{type:'text',text:title,weight:'bold',size:'md',color},...(rows.length?rows:[{type:'text',text:'Chưa có nhân viên',size:'sm',color:'#94a3b8',margin:'sm'}])]});
   }
   return{type:'flex',altText:`Ca làm việc ${k}`,contents:{type:'bubble',size:'kilo',body:{type:'box',layout:'vertical',paddingAll:'16px',contents:[{type:'text',text:'CA LÀM VIỆC',size:'xs',weight:'bold',color:'#7b8798'},{type:'text',text:k,size:'xl',weight:'bold',color:'#0b2452',margin:'xs'},...blocks]}}};
 }
-module.exports={docLichCa,luuLich,docLich,theCaNgay,CA};
+module.exports={docLichCa,luuLich,docLich,theCaNgay,CA,viTriTheoMau};
