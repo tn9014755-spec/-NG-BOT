@@ -28,7 +28,7 @@ app.post("/chat", async (req, res) => {
     const messages = [
       {
         role: "system",
-        content: "Bạn là trợ lý tiếng Việt cho bot LINE của cửa hàng. Trả lời rõ ràng, ngắn gọn, không tự bịa số liệu. Nếu câu hỏi liên quan báo cáo hoặc dữ liệu cửa hàng, chỉ sử dụng thông tin được cung cấp trong ngữ cảnh."
+        content: typeof req.body?.system === "string" && req.body.system.trim() ? req.body.system.trim().slice(0, 12000) : "Bạn là trợ lý tiếng Việt cho bot LINE của cửa hàng. Trả lời rõ ràng, ngắn gọn, không tự bịa số liệu."
       },
       ...(context ? [{ role: "system", content: "Ngữ cảnh dữ liệu do hệ thống cung cấp:\n" + context.slice(0, 20000) }] : []),
       { role: "user", content: message.slice(0, 12000) }
@@ -43,7 +43,8 @@ app.post("/chat", async (req, res) => {
       body: JSON.stringify({
         model: OPENAI_MODEL,
         messages,
-        temperature: 0.3
+        temperature: 0.3,
+        max_tokens: Math.max(256, Math.min(Number(req.body?.maxTokens || 4096), 8192))
       }),
       signal: AbortSignal.timeout(45000)
     });
