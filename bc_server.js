@@ -52,9 +52,9 @@ function splitTextForLine(text,userId){
 }
 async function reply(token,messages){if(!TOKEN||!token)return false;const ms=cleanMessages(messages);if(!ms.length)return false;const r=await line(API+"/message/reply",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({replyToken:token,messages:ms})});console.log("📤 LINE REPLY",r.status);if(!r.ok)console.error(await r.text());return r.ok}
 async function push(to,messages){if(!TOKEN||!to)return false;const ms=cleanMessages(messages);if(!ms.length)return false;const r=await line(API+"/message/push",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({to,messages:ms})});console.log("📤 LINE PUSH",r.status);if(!r.ok)console.error("LINE PUSH ERROR:",await r.text());return r.ok}
-const GEMINI_KEY=process.env.GEMINI_API_KEY||"";
-const GEMINI_MODEL=process.env.GEMINI_MODEL||"gemini-3.6-flash";
-const GEMINI_SYSTEM="Bạn là NG-BOT, trợ lý AI tiếng Việt đa năng và thân thiện của anh. Em không chỉ làm báo cáo: em có thể hỗ trợ phân tích dữ liệu, bán lẻ, FMCG, FRESH, ngành hàng, doanh thu, hao hụt, tồn kho, vận hành siêu thị, lập kế hoạch, quản lý công việc, Excel, công nghệ, LINE Bot, lập trình, kiến thức phổ thông và giải thích vấn đề theo yêu cầu. Luôn ưu tiên trả lời có chiều sâu khi anh cần, nhưng vẫn đi thẳng vào vấn đề. Khi có nhiều cách xử lý, hãy nêu phương án tốt nhất trước rồi mới nói các lựa chọn khác. Khi phân tích số liệu, phải đọc kỹ dữ liệu được cung cấp, tìm xu hướng, bất thường, nguyên nhân khả dĩ, rủi ro và hành động đề xuất; phân biệt rõ SỐ LIỆU THỰC TẾ với NHẬN ĐỊNH hoặc SUY LUẬN. Không bịa kết quả, không bịa nguồn, không nói đã thực hiện việc khi chưa có dữ liệu hoặc log xác nhận. Khi có dữ liệu báo cáo, phải bám đúng số liệu và không tự thay thế bằng kiến thức chung. Nếu thiếu dữ liệu quan trọng, nói rõ đang thiếu gì. Với kiến thức chung có thể trả lời bằng hiểu biết của mô hình; với thông tin thời sự, giá cả, trạng thái dịch vụ hoặc sự kiện mới nhất mà không có dữ liệu cập nhật, phải nói rõ giới hạn cập nhật thay vì khẳng định chắc chắn. Xưng em và gọi người dùng là anh. Ghi nhớ ngữ cảnh trong nội dung cuộc trò chuyện và dữ liệu được hệ thống cung cấp; không yêu cầu anh gửi lại thứ đã có trong ngữ cảnh hiện tại. QUAN TRỌNG VỀ ĐỊNH DẠNG: trả lời bằng văn bản thuần, TUYỆT ĐỐI không dùng markdown. Không dùng ** để in đậm, không dùng * hoặc - đầu dòng, không dùng # làm tiêu đề, không dùng bảng. LINE hiển thị nguyên các ký tự đó nên rất xấu. Muốn nhấn mạnh thì viết IN HOA hoặc dùng emoji. Danh sách thì mỗi ý một dòng, mở đầu bằng emoji hoặc số thứ tự. Khi câu trả lời dài, chia thành các đoạn ngắn có tiêu đề rõ ràng để không bị rối. QUAN TRỌNG VỀ THỜI GIAN: ngày giờ hiện tại luôn được hệ thống truyền trực tiếp trong từng câu hỏi. Tuyệt đối không dùng ngày tháng từ trí nhớ, dữ liệu huấn luyện hay tự suy đoán. Khi người dùng nói hôm nay, hôm qua, ngày mai, tuần này hoặc năm nay thì phải tính dựa trên THỜI GIAN HỆ THỐNG được cung cấp. Nếu hệ thống không cung cấp thời gian thì phải nói không xác định, không được đoán.";
+const AI_SERVICE_TOKEN=process.env.OPENAI_API_KEY||"";
+const AI_SERVICE_MODEL=process.env.AI_SERVICE_MODEL||"gemini-3.6-flash";
+const OPENAI_SYSTEM="Bạn là NG-BOT, trợ lý AI tiếng Việt đa năng và thân thiện của anh. Em không chỉ làm báo cáo: em có thể hỗ trợ phân tích dữ liệu, bán lẻ, FMCG, FRESH, ngành hàng, doanh thu, hao hụt, tồn kho, vận hành siêu thị, lập kế hoạch, quản lý công việc, Excel, công nghệ, LINE Bot, lập trình, kiến thức phổ thông và giải thích vấn đề theo yêu cầu. Luôn ưu tiên trả lời có chiều sâu khi anh cần, nhưng vẫn đi thẳng vào vấn đề. Khi có nhiều cách xử lý, hãy nêu phương án tốt nhất trước rồi mới nói các lựa chọn khác. Khi phân tích số liệu, phải đọc kỹ dữ liệu được cung cấp, tìm xu hướng, bất thường, nguyên nhân khả dĩ, rủi ro và hành động đề xuất; phân biệt rõ SỐ LIỆU THỰC TẾ với NHẬN ĐỊNH hoặc SUY LUẬN. Không bịa kết quả, không bịa nguồn, không nói đã thực hiện việc khi chưa có dữ liệu hoặc log xác nhận. Khi có dữ liệu báo cáo, phải bám đúng số liệu và không tự thay thế bằng kiến thức chung. Nếu thiếu dữ liệu quan trọng, nói rõ đang thiếu gì. Với kiến thức chung có thể trả lời bằng hiểu biết của mô hình; với thông tin thời sự, giá cả, trạng thái dịch vụ hoặc sự kiện mới nhất mà không có dữ liệu cập nhật, phải nói rõ giới hạn cập nhật thay vì khẳng định chắc chắn. Xưng em và gọi người dùng là anh. Ghi nhớ ngữ cảnh trong nội dung cuộc trò chuyện và dữ liệu được hệ thống cung cấp; không yêu cầu anh gửi lại thứ đã có trong ngữ cảnh hiện tại. QUAN TRỌNG VỀ ĐỊNH DẠNG: trả lời bằng văn bản thuần, TUYỆT ĐỐI không dùng markdown. Không dùng ** để in đậm, không dùng * hoặc - đầu dòng, không dùng # làm tiêu đề, không dùng bảng. LINE hiển thị nguyên các ký tự đó nên rất xấu. Muốn nhấn mạnh thì viết IN HOA hoặc dùng emoji. Danh sách thì mỗi ý một dòng, mở đầu bằng emoji hoặc số thứ tự. Khi câu trả lời dài, chia thành các đoạn ngắn có tiêu đề rõ ràng để không bị rối. QUAN TRỌNG VỀ THỜI GIAN: ngày giờ hiện tại luôn được hệ thống truyền trực tiếp trong từng câu hỏi. Tuyệt đối không dùng ngày tháng từ trí nhớ, dữ liệu huấn luyện hay tự suy đoán. Khi người dùng nói hôm nay, hôm qua, ngày mai, tuần này hoặc năm nay thì phải tính dựa trên THỜI GIAN HỆ THỐNG được cung cấp. Nếu hệ thống không cung cấp thời gian thì phải nói không xác định, không được đoán.";
 function latestReportContext(){
  const parts=[];
  try{const s=state();if(s.lastReportData)parts.push("DỮ LIỆU BC SỨC KHỎE MỚI NHẤT:\n"+JSON.stringify(s.lastReportData))}catch(e){console.warn("⚠️ Không đọc được BC đã gửi cho AI:",e.message)}
@@ -68,10 +68,11 @@ function vietnamNowContext(){
  const o={}; for(const p of parts)if(p.type!=="literal")o[p.type]=p.value;
  return "THỜI GIAN HỆ THỐNG HIỆN TẠI (MÚI GIỜ VIỆT NAM, Asia/Ho_Chi_Minh): "+(o.weekday||"")+" "+(o.day||"")+"/"+(o.month||"")+"/"+(o.year||"")+" "+(o.hour||"")+":"+(o.minute||"")+":"+(o.second||"")+". ISO: "+(o.year||"")+"-"+(o.month||"")+"-"+(o.day||"")+".";
 }
-async function askGemini(userText,reportContext=""){
- if(!GEMINI_KEY)throw new Error("Chưa cấu hình GEMINI_API_KEY trên Render");
- const fallbackEnv=String(process.env.GEMINI_FALLBACK_MODELS||"gemini-3.7-flash").split(/[;,]/).map(x=>x.trim()).filter(Boolean);
- const models=[...new Set([GEMINI_MODEL,...fallbackEnv])].slice(0,3);
+const AI_SERVICE_URL=String(process.env.AI_SERVICE_URL||"").replace(/\/+$/,"");
+const AI_SERVICE_TOKEN=process.env.AI_SERVICE_TOKEN||"";
+async function askOpenAI(userText,reportContext=""){
+ if(!AI_SERVICE_URL)throw new Error("Chưa cấu hình AI_SERVICE_URL trên Render");
+ if(!AI_SERVICE_TOKEN)throw new Error("Chưa cấu hình AI_SERVICE_TOKEN trên Render");
  const q=String(userText||"");
  const deep=/(phân tích sâu|phân tích đầy đủ|chi tiết toàn bộ|báo cáo đầy đủ|tổng hợp đầy đủ)/i.test(q);
  const fastContext=reportContext?String(reportContext).slice(0,deep?24000:20000):"";
@@ -80,38 +81,23 @@ async function askGemini(userText,reportContext=""){
  const prompt=fastContext
   ?"YÊU CẦU CỦA ANH:\n"+q+"\n\n"+fastContext+rules+"\n\nTrả lời trực tiếp bằng tiếng Việt, bám đúng số liệu. Nếu chỉ hỏi một chỉ số/ngành hàng thì trả lời ngắn gọn. Nếu yêu cầu phân tích thì nêu kết luận trước, sau đó số liệu và hành động. Không bịa số liệu, không kết thúc dang dở."
   :"YÊU CẦU CỦA ANH:\n"+q+rules;
- const outputLimit=deep?8192:4096;
- const perCallMs=Number(process.env.GEMINI_TIMEOUT_MS||12000);
- const deadline=Date.now()+Number(process.env.GEMINI_TOTAL_BUDGET_MS||30000);
- let lastErr;
- for(const model of models){
-  for(let attempt=0;attempt<2;attempt++){
-   const remain=deadline-Date.now();
-   if(remain<=1500){console.warn("⏱️ GEMINI đã hết ngân sách thời gian, dừng thử model");lastErr=lastErr||new Error("Gemini quá hạn thời gian");break}
-   const controller=new AbortController();
-   const timer=setTimeout(()=>controller.abort(),Math.min(perCallMs,remain));
-   try{
-    const url="https://generativelanguage.googleapis.com/v1beta/models/"+encodeURIComponent(model)+":generateContent?key="+encodeURIComponent(GEMINI_KEY);
-    const body={system_instruction:{parts:[{text:GEMINI_SYSTEM}]},contents:[{role:"user",parts:[{text:prompt}]}],generationConfig:{maxOutputTokens:outputLimit,temperature:0.3}};
-    const r=await fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body),signal:controller.signal});
-    const j=await r.json().catch(()=>({}));
-    if(!r.ok){const e=new Error("Gemini "+r.status+" "+(j.error?.message||"request failed"));e.status=r.status;throw e}
-    const cand=(j.candidates||[])[0]||{};
-    const out=(cand.content?.parts||[]).map(x=>x.text||"").join("").trim();
-    if(!out)throw new Error("Gemini trả lời rỗng");
-    return out.slice(0,30000);
-   }catch(err){
-    lastErr=err;
-    console.warn("⚠️ GEMINI",model,"lần",attempt+1,err.message);
-    const retryable=[500,502,504].includes(err.status);
-    if(retryable&&attempt===0){await new Promise(r=>setTimeout(r,500));continue}
-    break;
-   }finally{clearTimeout(timer)}
-  }
- }
- throw lastErr||new Error("Gemini không trả về nội dung");
+ const controller=new AbortController();
+ const timer=setTimeout(()=>controller.abort(),Number(process.env.AI_SERVICE_TIMEOUT_MS||45000));
+ try{
+  const r=await fetch(AI_SERVICE_URL.replace(/\/+$/,"")+"/chat",{
+   method:"POST",
+   headers:{"Content-Type":"application/json","Authorization":"Bearer "+AI_SERVICE_TOKEN},
+   body:JSON.stringify({message:prompt,system:OPENAI_SYSTEM,maxTokens:deep?8192:4096}),
+   signal:controller.signal
+  });
+  const data=await r.json().catch(()=>({}));
+  if(!r.ok)throw new Error("AI service "+r.status+": "+String(data.error||"request failed"));
+  const out=String(data.reply||"").trim();
+  if(!out)throw new Error("AI service trả lời rỗng");
+  return out.slice(0,30000);
+ }finally{clearTimeout(timer)}
 }
-const freshAI=createFreshAI({askAI:askGemini,dataDir:"/tmp/fresh"});
+const freshAI=createFreshAI({askAI:askOpenAI,dataDir:"/tmp/fresh"});
 
 async function checkMeetingReminders(){for(const m of meeting.due()){console.log(`⏰ MEETING → Gửi nhắc: ${m.content} | ${m.date} ${m.hour}h${String(m.minute).padStart(2,"0")}`);const uid=m.userId||"";const ok=await push(m.target,tagAnh(`⏰ NHẮC LỊCH\n\n📝 ${m.content}\n🕐 ${String(m.hour).padStart(2,"0")}h${String(m.minute).padStart(2,"0")}\n📆 ${m.date}`,uid));if(!ok)console.warn(`⚠️ NHẮC LỊCH → LINE gửi thất bại: ${m.id}`)}}
 async function saveBCPersistence(name,data){try{putLocalJson(name,data)}catch(e){console.error(`❌ LOCAL BC WRITE ERROR → ${name}:`,e.message)}if(hasDriveCredentials()){Promise.resolve().then(()=>putJson(name,data)).catch(e=>console.warn(`⚠️ DRIVE BC WRITE FAILED → ${name}: ${e.message}`))}else console.log(`ℹ️ DRIVE BC BACKGROUND SKIP → chưa có Google credentials | ${name}`)}
@@ -228,12 +214,12 @@ if(!["BC","DATA","NAP DU LIEU"].includes(t)){
   // Không gửi tin "đang phân tích" trước: replyToken chỉ dùng được một lần.
   // Chờ AI xong rồi trả lời trực tiếp bằng REPLY để không phụ thuộc quota PUSH.
   console.log("🤖 AI STEP → BẮT ĐẦU phân tích");
-  const ai=await askGemini(commandRaw,reportContext);
+  const ai=await askOpenAI(commandRaw,reportContext);
   console.log("🤖 AI STEP → XONG, gửi LINE REPLY");
   const sent=await reply(e.replyToken,splitTextForLine(ai,userId));
   if(!sent)console.error("❌ Không reply được kết quả AI");
  }catch(err){
-  console.error("❌ GEMINI ERROR",err);
+  console.error("❌ OPENAI ERROR",err);
   await reply(e.replyToken,tagAnh("❌ AI chưa trả lời được: "+String(err.message||err).slice(0,180)+"\n\nAnh thử lại sau ít phút hoặc hỏi ngắn hơn nhé.",userId));
  }
  continue
@@ -254,5 +240,5 @@ if(!["BC","DATA","NAP DU LIEU"].includes(t)){
   await reply(e.replyToken,tagAnh("❌ Xử lý file lỗi: "+String(err.message||err).slice(0,180),userId));
  }
 }}}});
-app.listen(PORT,()=>{console.log("NG-BOT READY PORT "+PORT);console.log("⚡ BC HOT PATH: buildData → lưu JSON → Flex → LINE REPLY (ưu tiên không dùng Push quota)");console.log("🎨 BC UI: GOOGLE DRIVE TEMPLATE");console.log("🕐 TIMEZONE:",meeting.TZ);console.log("🤖 GEMINI:",GEMINI_MODEL,"| API KEY:",GEMINI_KEY?"OK":"MISSING");setInterval(checkMeetingReminders,60000);checkMeetingReminders().catch(console.error)});
+app.listen(PORT,()=>{console.log("NG-BOT READY PORT "+PORT);console.log("⚡ BC HOT PATH: buildData → lưu JSON → Flex → LINE REPLY (ưu tiên không dùng Push quota)");console.log("🎨 BC UI: GOOGLE DRIVE TEMPLATE");console.log("🕐 TIMEZONE:",meeting.TZ);console.log("🤖 OPENAI:",AI_SERVICE_MODEL,"| API KEY:",AI_SERVICE_TOKEN?"OK":"MISSING");setInterval(checkMeetingReminders,60000);checkMeetingReminders().catch(console.error)});
                                                                                                
