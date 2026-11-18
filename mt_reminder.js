@@ -26,6 +26,11 @@ function disable(groupId) { const s = load(); s.groups = (s.groups || []).filter
 function isOn(groupId) { return targets().includes(groupId); }
 function scheduleText() { return SCHEDULE.map(x => `⏰ ${String(x.hour).padStart(2, "0")}h: ${x.text.split("\n").pop()}`).join("\n"); }
 
+function allMessage(text) {
+  const safe = String(text).replace(/[{}]/g, c => c + c); // textV2: dấu { } phải nhân đôi
+  return { type: "textV2", text: "{all} " + safe, substitution: { all: { type: "mention", mentionee: { type: "all" } } } };
+}
+
 async function tick(push) {
   const now = vnNow();
   const slot = SCHEDULE.find(x => x.hour === now.hour && now.minute < 10); // gửi trong 10 phút đầu của khung giờ
@@ -35,8 +40,10 @@ async function tick(push) {
     const key = `${now.day}|${slot.hour}|${g}`;
     if (s.sent[key]) continue;
     s.sent[key] = Date.now(); save(s); // đánh dấu trước để không gửi trùng
-    const ok = await push(g, [{ type: "text", text: slot.text }]);
-    console.log(`🎯 NHẮC MT → ${slot.hour}h → ${g}: ${ok ? "OK" : "LỖI"}`);
+    // @All cả nhóm (textV2); nếu LINE từ chối thì gửi lại dạng chữ thường để không mất nhắc
+    let ok = await push(g, [allMessage(slot.text)]), mode = "@All";
+    if (!ok) { ok = await push(g, [{ type: "text", text: slot.text }]); mode = "chữ thường"; }
+    console.log(`🎯 NHẮC MT → ${slot.hour}h → ${g}: ${ok ? "OK" : "LỖI"} (${mode})`);
   }
   // dọn dấu cũ
   for (const k of Object.keys(s.sent)) if (!k.startsWith(now.day)) delete s.sent[k];
