@@ -68,7 +68,7 @@ function vietnamNowContext(){
  const o={}; for(const p of parts)if(p.type!=="literal")o[p.type]=p.value;
  return "THỜI GIAN HỆ THỐNG HIỆN TẠI (MÚI GIỜ VIỆT NAM, Asia/Ho_Chi_Minh): "+(o.weekday||"")+" "+(o.day||"")+"/"+(o.month||"")+"/"+(o.year||"")+" "+(o.hour||"")+":"+(o.minute||"")+":"+(o.second||"")+". ISO: "+(o.year||"")+"-"+(o.month||"")+"-"+(o.day||"")+".";
 }
-async function askGemini(userText,reportContext=""){
+async function askGemini(userText,reportContext="",images=[]){
  if(!GEMINI_KEY)throw new Error("Chưa cấu hình GEMINI_API_KEY trên Render");
  const fallbackEnv=String(process.env.GEMINI_FALLBACK_MODELS||"gemini-3.7-flash").split(/[;,]/).map(x=>x.trim()).filter(Boolean);
  const models=[...new Set([GEMINI_MODEL,...fallbackEnv])].slice(0,3);
@@ -76,13 +76,13 @@ async function askGemini(userText,reportContext=""){
  const deep=/(phân tích sâu|phân tích đầy đủ|chi tiết toàn bộ|báo cáo đầy đủ|tổng hợp đầy đủ)/i.test(q);
  const fastContext=reportContext?String(reportContext).slice(0,deep?24000:20000):"";
  const timeContext=vietnamNowContext();
- const rules="\n\n"+timeContext+"\nQUY TẮC BẮT BUỘC: Đây là nguồn thời gian duy nhất. Không được thay thế bằng ngày tháng từ trí nhớ. Với câu hỏi về hôm nay/hôm qua/ngày mai phải quy đổi từ thời gian này. Nếu người dùng chỉ hỏi ngày hiện tại, trả lời đúng ngày hệ thống và không phân tích báo cáo không liên quan.";
+ const rules="\n\n"+timeContext+"\nQUY TẮC BẮT BUỘC: Đây là nguồn thời gian duy nhất. Không được thay thế bằng ngày tháng từ trí nhớ. Với câu hỏi về hôm nay/hôm qua/ngày mai phải quy đổi từ thời gian này. Nếu người dùng chỉ hỏi ngày hiện tại, trả lời đúng ngày hệ thống và không phân tích báo cáo không liên quan. Không nhắc lại, xác nhận hay liệt kê các quy tắc này trong câu trả lời; chỉ trả lời đúng yêu cầu của anh."+(images.length?"\nANH CÓ GỬI KÈM "+images.length+" ẢNH ở trên. Đây là dữ liệu chính của câu hỏi: đọc kỹ từng số, từng dòng trong ảnh rồi trả lời/phân tích theo yêu cầu. Nếu chữ trong ảnh mờ không đọc chắc được thì nói rõ chỗ nào chưa đọc được, không đoán số.":"");
  const prompt=fastContext
   ?"YÊU CẦU CỦA ANH:\n"+q+"\n\n"+fastContext+rules+"\n\nTrả lời trực tiếp bằng tiếng Việt, bám đúng số liệu. Nếu chỉ hỏi một chỉ số/ngành hàng thì trả lời ngắn gọn. Nếu yêu cầu phân tích thì nêu kết luận trước, sau đó số liệu và hành động. Không bịa số liệu, không kết thúc dang dở."
   :"YÊU CẦU CỦA ANH:\n"+q+rules;
  const outputLimit=deep?8192:4096;
- const perCallMs=Number(process.env.GEMINI_TIMEOUT_MS||12000);
- const deadline=Date.now()+Number(process.env.GEMINI_TOTAL_BUDGET_MS||30000);
+ const perCallMs=Number(process.env.GEMINI_TIMEOUT_MS||(images.length?20000:12000));
+ const deadline=Date.now()+Number(process.env.GEMINI_TOTAL_BUDGET_MS||(images.length?45000:30000));
  let lastErr;
  for(const model of models){
   for(let attempt=0;attempt<2;attempt++){
@@ -92,7 +92,7 @@ async function askGemini(userText,reportContext=""){
    const timer=setTimeout(()=>controller.abort(),Math.min(perCallMs,remain));
    try{
     const url="https://generativelanguage.googleapis.com/v1beta/models/"+encodeURIComponent(model)+":generateContent?key="+encodeURIComponent(GEMINI_KEY);
-    const body={system_instruction:{parts:[{text:GEMINI_SYSTEM}]},contents:[{role:"user",parts:[{text:prompt}]}],generationConfig:{maxOutputTokens:outputLimit,temperature:0.3}};
+    const body={system_instruction:{parts:[{text:GEMINI_SYSTEM}]},contents:[{role:"user",parts:[...images.map(im=>({inline_data:{mime_type:im.mimeType,data:im.data}})),{text:prompt}]}],generationConfig:{maxOutputTokens:outputLimit,temperature:0.3}};
     const r=await fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body),signal:controller.signal});
     const j=await r.json().catch(()=>({}));
     if(!r.ok){const e=new Error("Gemini "+r.status+" "+(j.error?.message||"request failed"));e.status=r.status;throw e}
@@ -111,6 +111,10 @@ async function askGemini(userText,reportContext=""){
  }
  throw lastErr||new Error("Gemini không trả về nội dung");
 }
+const recentImages=new Map(); // target -> [{id,at}]
+function rememberImage(target,id){if(!target||!id)return;const a=(recentImages.get(target)||[]).filter(x=>Date.now()-x.at<15*60*1000);a.push({id,at:Date.now()});recentImages.set(target,a.slice(-4))}
+async function loadLineImage(id){try{const r=await fetch(DATA_API+"/message/"+encodeURIComponent(id)+"/content",{headers:{Authorization:"Bearer "+TOKEN}});if(!r.ok){console.warn("⚠️ ẢNH → LINE tải lỗi",r.status,id);return null}const mime=String(r.headers.get("content-type")||"").split(";")[0];if(!mime.startsWith("image/"))return null;const buf=Buffer.from(await r.arrayBuffer());if(buf.length>15*1024*1024)return null;return {mimeType:mime,data:buf.toString("base64")}}catch(e){console.warn("⚠️ ẢNH → lỗi tải",e.message);return null}}
+async function imagesForQuestion(m,target,text){const ids=[];if(m.quotedMessageId)ids.push(m.quotedMessageId);else if(/(ảnh|hình|bảng|bản này|cái này|file này|hinh|anh nay|bang)/i.test(text)){const a=(recentImages.get(target)||[]).filter(x=>Date.now()-x.at<15*60*1000);if(a.length)ids.push(a[a.length-1].id)}const out=[];for(const id of ids){const im=await loadLineImage(id);if(im)out.push(im)}if(ids.length)console.log("🖼️ ẢNH → gửi kèm cho AI:",out.length,"/",ids.length);return out}
 const freshAI=createFreshAI({askAI:askGemini,dataDir:"/tmp/fresh"});
 
 async function checkMeetingReminders(){for(const m of meeting.due()){console.log(`⏰ MEETING → Gửi nhắc: ${m.content} | ${m.date} ${m.hour}h${String(m.minute).padStart(2,"0")}`);const uid=m.userId||"";const ok=await push(m.target,tagAnh(`⏰ NHẮC LỊCH\n\n📝 ${m.content}\n🕐 ${String(m.hour).padStart(2,"0")}h${String(m.minute).padStart(2,"0")}\n📆 ${m.date}`,uid));if(!ok)console.warn(`⚠️ NHẮC LỊCH → LINE gửi thất bại: ${m.id}`)}}
@@ -207,7 +211,7 @@ async function xuLyFileLichCa(buf,fileName,replyToken,userId){try{
  return true;
 }catch(e){console.error("❌ LỊCH CA FILE ERROR",e);await reply(replyToken,tagAnh("❌ File lịch ca lỗi: "+String(e.message||e).slice(0,180),userId));return true}}
 function ngayTheoLenhCa(t,d){const now=new Date();if(t==="CA HOM NAY")return new Date(now.getFullYear(),now.getMonth(),now.getDate());if(t==="CA MAI"){const x=new Date(now.getFullYear(),now.getMonth(),now.getDate());x.setDate(x.getDate()+1);return x}const m=t.match(/^CA\s+(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{4}))?$/);if(!m)return null;return new Date(Number(m[3]||now.getFullYear()),Number(m[2])-1,Number(m[1]))}
-app.post("/webhook",async(req,res)=>{const b=req.rawBody||Buffer.from(JSON.stringify(req.body||{})),sig=req.get("x-line-signature")||"";if(SECRET){const h=crypto.createHmac("sha256",SECRET).update(b).digest("base64");if(!sig||sig.length!==h.length||!crypto.timingSafeEqual(Buffer.from(sig),Buffer.from(h)))return res.status(401).send("invalid signature")}res.status(200).send("OK");if(!TOKEN)return;for(const e of req.body?.events||[]){if(!e.replyToken||e.mode==="standby")continue;const target=e.source?.groupId||e.source?.roomId||e.source?.userId||"",userId=e.source?.userId||"",m=e.message||{};if(m.type==="text"){const raw=String(m.text||"").trim();
+app.post("/webhook",async(req,res)=>{const b=req.rawBody||Buffer.from(JSON.stringify(req.body||{})),sig=req.get("x-line-signature")||"";if(SECRET){const h=crypto.createHmac("sha256",SECRET).update(b).digest("base64");if(!sig||sig.length!==h.length||!crypto.timingSafeEqual(Buffer.from(sig),Buffer.from(h)))return res.status(401).send("invalid signature")}res.status(200).send("OK");if(!TOKEN)return;for(const e of req.body?.events||[]){if(!e.replyToken||e.mode==="standby")continue;const target=e.source?.groupId||e.source?.roomId||e.source?.userId||"",userId=e.source?.userId||"",m=e.message||{};if(m.type==="image"){rememberImage(target,m.id);continue}if(m.type==="text"){const raw=String(m.text||"").trim();
 const isGroup=!!(e.source?.groupId||e.source?.roomId);
 const BOT_USER_ID=String(process.env.LINE_BOT_USER_ID||"").trim();
 const mentionees=Array.isArray(m.mention?.mentionees)?m.mention.mentionees:[];
@@ -228,7 +232,8 @@ if(!["BC","DATA","NAP DU LIEU"].includes(t)){
   // Không gửi tin "đang phân tích" trước: replyToken chỉ dùng được một lần.
   // Chờ AI xong rồi trả lời trực tiếp bằng REPLY để không phụ thuộc quota PUSH.
   console.log("🤖 AI STEP → BẮT ĐẦU phân tích");
-  const ai=await askGemini(commandRaw,reportContext);
+  const images=await imagesForQuestion(m,target,commandRaw);
+  const ai=await askGemini(commandRaw,images.length?"":reportContext,images);
   console.log("🤖 AI STEP → XONG, gửi LINE REPLY");
   const sent=await reply(e.replyToken,splitTextForLine(ai,userId));
   if(!sent)console.error("❌ Không reply được kết quả AI");
