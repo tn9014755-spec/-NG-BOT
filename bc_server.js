@@ -103,8 +103,8 @@ async function askGemini(userText,reportContext=""){
    }catch(err){
     lastErr=err;
     console.warn("⚠️ GEMINI",model,"lần",attempt+1,err.message);
-    const retryable=[500,502,504].includes(err.status);
-    if(retryable&&attempt===0){await new Promise(r=>setTimeout(r,500));continue}
+    const retryable=[500,502,503,504].includes(err.status);
+    if(retryable&&attempt===0){await new Promise(r=>setTimeout(r,err.status===503?1500:500));continue}
     break;
    }finally{clearTimeout(timer)}
   }
