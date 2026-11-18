@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BC SỨC KHỎE 28717 · T11 vs T10</title>
+<style>
+:root{--bg:#f1f4f9;--card:#fff;--ink:#16213a;--mute:#6b7689;--line:#e2e8f1;
+--blue:#1d5fd6;--blue2:#163f97;--green:#12945f;--teal:#0e8a8f;--amber:#c98100;--orange:#e5731a;--up:#0f8a55;--down:#d23a4b;
+--fmcg:#1d5fd6;--fresh:#12945f;--mat:#0e8a8f}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:12px 12px 28px}
+.num{font-variant-numeric:tabular-nums}
+header{background:linear-gradient(135deg,var(--blue2),var(--blue));color:#fff;border-radius:18px;padding:16px 16px 14px}
+header .kick{font-size:11px;letter-spacing:.08em;text-transform:uppercase;opacity:.8;font-weight:700}
+header h1{margin:4px 0 2px;font-size:20px;line-height:1.25}
+header .meta{font-size:12px;opacity:.85}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+.chip{background:rgba(255,255,255,.16);border-radius:99px;padding:4px 10px;font-size:11.5px;font-weight:700}
+.note{margin-top:10px;background:#fff4dc;color:#7a4d00;border:1px solid #f0d49a;border-radius:12px;padding:9px 12px;font-size:12.5px;font-weight:600}
+h2{font-size:15px;margin:22px 2px 8px;display:flex;align-items:center;gap:8px}
+h2 small{font-weight:600;color:var(--mute);font-size:12px;margin-left:auto}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;box-shadow:0 2px 10px rgba(22,33,58,.04)}
+.hero{display:grid;grid-template-columns:1.25fr 1fr;gap:10px;margin-top:12px}
+.big .lbl{font-size:11.5px;color:var(--mute);font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+.big .val{font-size:26px;font-weight:800;margin:4px 0 2px;letter-spacing:-.01em}
+.big .sub{font-size:12px;color:var(--mute)}
+.hero .main{background:linear-gradient(160deg,#eaf1ff,#fff 70%);border-color:#cfdcf7}
+.hero .main .val{color:var(--blue2)}
+.fc .val{color:var(--amber)}
+.bar{height:8px;background:#e6ecf5;border-radius:99px;overflow:hidden;margin-top:10px}
+.bar i{display:block;height:100%;background:linear-gradient(90deg,var(--blue),#4d8af0);border-radius:99px}
+.pill{display:inline-flex;align-items:center;gap:3px;border-radius:99px;padding:2px 8px;font-size:12px;font-weight:800}
+.pill.up{background:#e3f6ec;color:var(--up)}.pill.down{background:#fde8eb;color:var(--down)}.pill.flat{background:#eef1f6;color:var(--mute)}
+.kpis{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.kpi{border-left:4px solid var(--blue)}
+.kpi.k-bill{border-left-color:var(--green)}.kpi.k-bv{border-left-color:var(--amber)}.kpi.k-off{border-left-color:var(--blue)}.kpi.k-on{border-left-color:var(--orange)}.kpi.k-dt{border-left-color:var(--blue2)}
+.kpi .lbl{font-size:11.5px;color:var(--mute);font-weight:700;text-transform:uppercase}
+.kpi .val{font-size:19px;font-weight:800;margin:3px 0}
+.kpi .row{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--mute)}
+.kpi.wide{grid-column:1/-1}
+.groups{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.g{border-top:4px solid var(--fmcg);padding:12px}
+.g.fresh{border-top-color:var(--fresh)}.g.mat{border-top-color:var(--mat)}
+.g .name{font-weight:800;font-size:13px}
+.g.fmcg .name{color:var(--fmcg)}.g.fresh .name{color:var(--fresh)}.g.mat .name{color:var(--mat)}
+.g .val{font-size:18px;font-weight:800;margin:4px 0 2px}
+.g .sub{font-size:11.5px;color:var(--mute)}
+.g .share{margin-top:6px;font-size:11.5px;color:var(--mute)}
+.movers{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.movers h3{margin:0 0 8px;font-size:13px}
+.movers .up h3{color:var(--up)}.movers .down h3{color:var(--down)}
+.mv{display:flex;justify-content:space-between;gap:8px;padding:7px 0;border-top:1px dashed var(--line);font-size:12.5px}
+.mv:first-of-type{border-top:0}
+.mv b{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mv span{white-space:nowrap;font-weight:800}
+.mv.u span{color:var(--up)}.mv.d span{color:var(--down)}
+.tbl{width:100%;border-collapse:collapse}
+.tbl th{font-size:11px;color:var(--mute);text-transform:uppercase;font-weight:700;text-align:right;padding:8px 6px;border-bottom:1px solid var(--line)}
+.tbl th:first-child,.tbl td:first-child{text-align:left}
+.tbl td{padding:9px 6px;border-bottom:1px solid #eef2f7;text-align:right;font-size:13px;white-space:nowrap}
+.tbl td:first-child{white-space:normal;font-weight:600;max-width:150px}
+.tbl tr:last-child td{border-bottom:0}
+.tbl .tot td{font-weight:800;background:#f7f9fc}
+.blk{padding:0;overflow:hidden;margin-bottom:10px}
+.blk .hd{display:flex;justify-content:space-between;align-items:center;padding:11px 14px;color:#fff;font-weight:800}
+.blk.fmcg .hd{background:var(--fmcg)}.blk.fresh .hd{background:var(--fresh)}.blk.mat .hd{background:var(--mat)}
+.blk .hd span{font-size:12px;font-weight:700;opacity:.9}
+.blk .bd{padding:2px 8px 6px;overflow-x:auto}
+.up-t{color:var(--up);font-weight:800}.down-t{color:var(--down);font-weight:800}
+.chart{width:100%;height:auto;display:block}
+.legend{display:flex;gap:14px;font-size:12px;color:var(--mute);margin:2px 0 8px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+.daypick{display:flex;gap:10px;align-items:center;margin-top:12px;flex-wrap:wrap}
+.daypick select{font:inherit;font-weight:700;padding:7px 10px;border-radius:10px;border:1px solid var(--line);background:#fff}
+.dayout{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}
+.dayout div{background:#f6f8fc;border-radius:12px;padding:10px}
+.dayout .lbl{font-size:11px;color:var(--mute);font-weight:700;text-transform:uppercase}
+.dayout .val{font-size:16px;font-weight:800;margin-top:2px}
+footer{margin-top:20px;text-align:center;font-size:11.5px;color:var(--mute)}
+@media(max-width:560px){.hero{grid-template-columns:1fr}.groups{grid-template-columns:1fr}.movers{grid-template-columns:1fr}.big .val{font-size:24px}.tbl td{font-size:12.5px;padding:8px 4px}.tbl th{padding:8px 4px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="kick">BC chi tiết sức khỏe siêu thị</div>
+    <h1>28717 · Mỹ Quới — T11 so với T10</h1>
+    <div class="meta" id="meta"></div>
+    <div class="chips"><span class="chip">T10 đã khóa</span><span class="chip">T11 cập nhật khi NẠP DỮ LIỆU</span><span class="chip">Không tính VAT</span></div>
+  </header>
+  <div id="note"></div>
+
+  <div class="hero">
+    <div class="card big main">
+      <div class="lbl" id="h11lbl">T11 đã thực hiện</div>
+      <div class="val num" id="h11"></div>
+      <div class="sub" id="h11sub"></div>
+      <div class="bar"><i id="h11bar"></i></div>
+      <div class="sub" style="margin-top:6px" id="h11bartxt"></div>
+    </div>
+    <div class="card big fc">
+      <div class="lbl">Dự kiến T11 cả tháng</div>
+      <div class="val num" id="fc"></div>
+      <div class="sub" id="fcsub"></div>
+    </div>
+  </div>
+
+  <h2>So cùng kỳ <small id="ckrange"></small></h2>
+  <div class="kpis" id="kpis"></div>
+
+  <h2>3 nhóm hàng <small>T11 vs T10 cùng kỳ</small></h2>
+  <div class="groups" id="groups"></div>
+
+  <h2>Ngành tăng / giảm nhiều nhất <small>theo số tiền</small></h2>
+  <div class="movers">
+    <div class="card up"><h3>▲ Tăng</h3><div id="mvUp"></div></div>
+    <div class="card down"><h3>▼ Giảm</h3><div id="mvDown"></div></div>
+  </div>
+
+  <h2>Chi tiết ngành hàng <small>đơn vị: triệu đ</small></h2>
+  <div id="blocks"></div>
+
+  <h2>Doanh thu theo ngày <small>triệu đ</small></h2>
+  <div class="card">
+    <div class="legend"><span><i style="background:#b9c6dc"></i>T10</span><span><i style="background:var(--blue)"></i>T11</span></div>
+    <svg class="chart" id="chart" viewBox="0 0 700 230"></svg>
+    <div class="daypick"><b>Xem ngày</b><select id="day"></select></div>
+    <div class="dayout" id="dayout"></div>
+  </div>
+
+  <footer id="foot"></footer>
+</div>
+<script>
+const D=/*__DATA__*/null;
+const fmt=new Intl.NumberFormat("vi-VN");
+const VND=n=>fmt.format(Math.round(n||0))+" đ";
+const TR=n=>(Math.round((n||0)/1e5)/10).toLocaleString("vi-VN",{minimumFractionDigits:1,maximumFractionDigits:1});
+const TRu=n=>TR(n)+" tr";
+const pct=(a,b)=>b?(a/b-1)*100:null;
+const pctTxt=v=>v==null?"—":(v>0?"+":"")+v.toFixed(1).replace(".",",")+"%";
+const pill=v=>`<span class="pill ${v==null||Math.abs(v)<0.05?"flat":v>0?"up":"down"}">${v==null?"—":(v>0?"▲ ":v<0?"▼ ":"")+pctTxt(v)}</span>`;
+const cls=v=>v==null?"":v>0?"up-t":v<0?"down-t":"";
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const short=n=>esc(String(n).replace(/^\d+\s*-\s*/,"").replace(/ các loại$/i,"").replace(/ - Bảo Quản Mát$/i," (mát)"));
+
+const N=D.lastDay,F=D.t10Full,S=D.t10Same,C=D.t11;
+$("meta").textContent=N?`Dữ liệu T11: 01/11 → ${String(N).padStart(2,"0")}/11 (${N} ngày) · T10: 01–31/10`:"Chưa có dữ liệu T11";
+if(D.note)$("note").innerHTML=`<div class="note">⚠️ ${esc(D.note)}</div>`;
+
+// Hero
+$("h11").textContent=VND(C.dt);
+$("h11sub").innerHTML=N?`Cùng kỳ T10: ${VND(S.dt)} &nbsp;${pill(pct(C.dt,S.dt))}`:"";
+const reach=F.dt?C.dt/F.dt*100:0;
+$("h11bar").style.width=Math.min(reach,100)+"%";
+$("h11bartxt").textContent=`Đạt ${reach.toFixed(1).replace(".",",")}% doanh thu cả tháng T10 (${TRu(F.dt)})`;
+$("fc").textContent=N?VND(D.forecast):"—";
+$("fcsub").innerHTML=N?`So T10 cả tháng ${pill(pct(D.forecast,F.dt))}<br>TB/ngày T11 ${TRu(C.dt/N)} · T10 ${TRu(F.dt/31)}`:"";
+
+// Cùng kỳ
+$("ckrange").textContent=N?`01–${String(N).padStart(2,"0")} T11 vs 01–${String(N).padStart(2,"0")} T10`:"";
+const k=(c,l,a,b,f)=>`<div class="card kpi ${c}"><div class="lbl">${l}</div><div class="val num">${f(a)}</div><div class="row"><span>T10: ${f(b)}</span>${pill(pct(a,b))}</div></div>`;
+$("kpis").innerHTML=
+ k("k-dt wide","Tổng doanh thu",C.dt,S.dt,VND)+
+ k("k-bill","Số bill",C.bills,S.bills,n=>fmt.format(n))+
+ k("k-bv","Giá trị bill",C.billValue,S.billValue,VND)+
+ k("k-off","Offline",C.offline,S.offline,TRu)+
+ k("k-on","Online",C.online,S.online,TRu);
+
+// Nhóm
+const GROUPS=[["fmcg","FMCG"],["fresh","FRESH"],["mat","ĐÔNG MÁT"]];
+const gsum=(g,f)=>D.cats.filter(c=>c.group===g).reduce((s,c)=>s+c[f],0);
+const tot11=D.cats.reduce((s,c)=>s+c.t11,0);
+$("groups").innerHTML=GROUPS.map(([g,n])=>{const a=gsum(g,"t11"),b=gsum(g,"t10Same");return `<div class="card g ${g}"><div class="name">${n}</div><div class="val num">${TRu(a)}</div><div class="sub">T10 cùng kỳ ${TRu(b)}</div><div style="margin-top:6px">${pill(pct(a,b))}</div><div class="share">Tỷ trọng T11: ${tot11?(a/tot11*100).toFixed(1).replace(".",","):"0"}%</div></div>`}).join("");
+
+// Tăng giảm
+const mv=D.cats.map(c=>({...c,d:c.t11-c.t10Same,p:pct(c.t11,c.t10Same)})).filter(c=>c.t10Same||c.t11);
+const ups=mv.filter(c=>c.d>0).sort((a,b)=>b.d-a.d).slice(0,4),downs=mv.filter(c=>c.d<0).sort((a,b)=>a.d-b.d).slice(0,4);
+const mvRow=(c,u)=>`<div class="mv ${u?"u":"d"}"><b>${short(c.name)}</b><span class="num">${u?"+":"−"}${TR(Math.abs(c.d))} tr · ${pctTxt(c.p)}</span></div>`;
+$("mvUp").innerHTML=ups.length?ups.map(c=>mvRow(c,1)).join(""):'<div class="mv">—</div>';
+$("mvDown").innerHTML=downs.length?downs.map(c=>mvRow(c,0)).join(""):'<div class="mv">—</div>';
+
+// Bảng chi tiết
+$("blocks").innerHTML=GROUPS.map(([g,n])=>{
+ const list=D.cats.filter(c=>c.group===g).sort((a,b)=>(b.t11||b.t10Same)-(a.t11||a.t10Same));
+ const t={t10Full:0,t10Same:0,t11:0};list.forEach(c=>{t.t10Full+=c.t10Full;t.t10Same+=c.t10Same;t.t11+=c.t11});
+ const row=(nm,c,tot)=>{const p=pct(c.t11,c.t10Same);return `<tr${tot?' class="tot"':""}><td>${nm}</td><td class="num">${TR(c.t10Full)}</td><td class="num">${TR(c.t10Same)}</td><td class="num"><b>${TR(c.t11)}</b></td><td class="num ${cls(p)}">${pctTxt(p)}</td></tr>`};
+ return `<div class="card blk ${g}"><div class="hd">${n}<span>${list.length} ngành · T11 ${TRu(t.t11)}</span></div><div class="bd"><table class="tbl"><thead><tr><th>Ngành hàng</th><th>T10 cả tháng</th><th>T10 cùng kỳ</th><th>T11</th><th>±% CK</th></tr></thead><tbody>${list.map(c=>row(short(c.name),c)).join("")}${row("Tổng "+n,t,1)}</tbody></table></div></div>`}).join("");
+
+// Biểu đồ ngày
+(function(){
+ const W=700,H=230,pad={l:6,r:6,t:10,b:30},days=31,bw=(W-pad.l-pad.r)/days;
+ const m10=new Map(D.dailyT10.map(x=>[x.day,x])),m11=new Map(D.dailyT11.map(x=>[x.day,x]));
+ const max=Math.max(1,...D.dailyT10.map(x=>x.dt),...D.dailyT11.map(x=>x.dt));
+ const y=v=>pad.t+(H-pad.t-pad.b)*(1-v/max);let s="";
+ for(let d=1;d<=days;d++){const x0=pad.l+(d-1)*bw,a=m10.get(d),b=m11.get(d),w=bw/2-1.5;
+  if(a)s+=`<rect x="${x0+1}" y="${y(a.dt)}" width="${w}" height="${H-pad.b-y(a.dt)}" rx="2" fill="#b9c6dc"/>`;
+  if(b)s+=`<rect x="${x0+1+w+1}" y="${y(b.dt)}" width="${w}" height="${H-pad.b-y(b.dt)}" rx="2" fill="#1d5fd6"/>`;
+  if(d===1||d%5===0)s+=`<text x="${x0+bw/2}" y="${H-6}" font-size="20" text-anchor="middle" fill="#6b7689">${d}</text>`}
+ s+=`<line x1="${pad.l}" x2="${W-pad.r}" y1="${H-pad.b}" y2="${H-pad.b}" stroke="#e2e8f1"/>`;
+ $("chart").innerHTML=s;
+ const sel=$("day"),maxDay=Math.max(N,1);
+ for(let d=maxDay;d>=1;d--)sel.insertAdjacentHTML("beforeend",`<option value="${d}">${String(d).padStart(2,"0")}/11 vs ${String(d).padStart(2,"0")}/10</option>`);
+ const show=()=>{const d=+sel.value,a=m10.get(d)||{dt:0,bills:0},b=m11.get(d)||{dt:0,bills:0},bv=x=>x.bills?x.dt/x.bills:0;
+  $("dayout").innerHTML=`<div><div class="lbl">Doanh thu</div><div class="val num">${TRu(b.dt)}</div>${pill(pct(b.dt,a.dt))}<div class="lbl" style="margin-top:4px">T10 ${TRu(a.dt)}</div></div><div><div class="lbl">Bill</div><div class="val num">${fmt.format(b.bills)}</div>${pill(pct(b.bills,a.bills))}<div class="lbl" style="margin-top:4px">T10 ${fmt.format(a.bills)}</div></div><div><div class="lbl">Giá trị bill</div><div class="val num">${fmt.format(Math.round(bv(b)/1000))}k</div>${pill(pct(bv(b),bv(a)))}<div class="lbl" style="margin-top:4px">T10 ${fmt.format(Math.round(bv(a)/1000))}k</div></div>`};
+ sel.onchange=show;show();
+})();
+$("foot").textContent="Cập nhật lúc "+new Date(D.builtAt).toLocaleString("vi-VN",{timeZone:"Asia/Ho_Chi_Minh"})+" · ng-bot /suc-khoe";
+</script>
+</body>
+</html>
