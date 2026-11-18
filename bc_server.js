@@ -71,7 +71,7 @@ function vietnamNowContext(){
 async function askGemini(userText,reportContext="",images=[]){
  if(!GEMINI_KEY)throw new Error("Chưa cấu hình GEMINI_API_KEY trên Render");
  const fallbackEnv=String(process.env.GEMINI_FALLBACK_MODELS||"gemini-3.7-flash").split(/[;,]/).map(x=>x.trim()).filter(Boolean);
- const models=[...new Set([GEMINI_MODEL,...fallbackEnv])].slice(0,3);
+ const models=[...new Set([GEMINI_MODEL,...fallbackEnv])].slice(0,4);
  const q=String(userText||"");
  const deep=/(phân tích sâu|phân tích đầy đủ|chi tiết toàn bộ|báo cáo đầy đủ|tổng hợp đầy đủ)/i.test(q);
  const fastContext=reportContext?String(reportContext).slice(0,deep?24000:20000):"";
