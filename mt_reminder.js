@@ -1,12 +1,15 @@
 // Nhắc MT (mục tiêu) hằng ngày vào nhóm LINE: 6h, 12h, 18h, 21h giờ Việt Nam.
+// Kèm nhắc BC vệ sinh GSĐ: 12h Fresh (kệ Fresh, tủ thịt, gầm), 18h Đông mát (tủ đông, tủ mát).
 // Nhóm nhận nhắc: biến môi trường MT_GROUP_IDS (cách nhau dấu phẩy) + nhóm bật bằng lệnh "BẬT NHẮC MT".
 const fs = require("fs"), path = require("path");
 const FILE = path.join(__dirname, "data", "mt_reminder.json");
 
 const SCHEDULE = [
   { hour: 6, text: "☀️ HI TEAM! Chúc cả team một buổi sáng làm việc thật hiệu quả 💪\n\n🎯 Các bạn đã sẵn sàng với MT hôm nay chưa !!" },
-  { hour: 12, text: "🕛 12H RỒI TEAM ƠI!\n\n🎯 MT hôm nay các bạn đã hoàn tất đến đâu rồi ?" },
-  { hour: 18, text: "🕕 18H - VỀ ĐÍCH THÔI!\n\n🎯 MT còn lại phải hoàn tất nhé !!" },
+  { hour: 12, text: "🕛 12H RỒI TEAM ƠI!\n\n🎯 MT hôm nay các bạn đã hoàn tất đến đâu rồi ?",
+    extra: "🧽 12H - BC VỆ SINH FRESH\n\n📸 Bộ phận Fresh gửi ảnh vệ sinh:\n✅ Kệ Fresh\n✅ Tủ thịt\n✅ Gầm" },
+  { hour: 18, text: "🕕 18H - VỀ ĐÍCH THÔI!\n\n🎯 MT còn lại phải hoàn tất nhé !!",
+    extra: "🧊 18H - BC VỆ SINH ĐÔNG MÁT\n\n📸 Thu ngân gửi ảnh vệ sinh:\n✅ Tủ đông\n✅ Tủ mát" },
   { hour: 21, text: "🌙 21H - TỔNG KẾT NGÀY\n\n📋 Nhờ QL tổng kết MT hôm nay nhé !" },
 ];
 
@@ -24,7 +27,7 @@ function vnNow() {
 function enable(groupId) { const s = load(); s.groups = [...new Set([...(s.groups || []), groupId])]; s.off = (s.off || []).filter(g => g !== groupId); save(s); console.log("🎯 NHẮC MT → BẬT cho nhóm", groupId); }
 function disable(groupId) { const s = load(); s.groups = (s.groups || []).filter(g => g !== groupId); s.off = [...new Set([...(s.off || []), groupId])]; save(s); console.log("🎯 NHẮC MT → TẮT cho nhóm", groupId); }
 function isOn(groupId) { return targets().includes(groupId); }
-function scheduleText() { return SCHEDULE.map(x => `⏰ ${String(x.hour).padStart(2, "0")}h: ${x.text.split("\n").pop()}`).join("\n"); }
+function scheduleText() { return SCHEDULE.map(x => `⏰ ${String(x.hour).padStart(2, "0")}h: ${x.text.split("\n").pop()}` + (x.extra ? `\n   + ${x.extra.split("\n")[0].replace(/^\S+\s*/, "")}` : "")).join("\n"); }
 
 function allMessage(text) {
   const safe = String(text).replace(/[{}]/g, c => c + c); // textV2: dấu { } phải nhân đôi
@@ -41,8 +44,10 @@ async function tick(push) {
     if (s.sent[key]) continue;
     s.sent[key] = Date.now(); save(s); // đánh dấu trước để không gửi trùng
     // @All cả nhóm (textV2); nếu LINE từ chối thì gửi lại dạng chữ thường để không mất nhắc
-    let ok = await push(g, [allMessage(slot.text)]), mode = "@All";
-    if (!ok) { ok = await push(g, [{ type: "text", text: slot.text }]); mode = "chữ thường"; }
+    // mốc có BC vệ sinh (12h Fresh, 18h Đông mát) → gửi kèm tin thứ 2 trong cùng lượt
+    const texts = [slot.text, ...(slot.extra ? [slot.extra] : [])];
+    let ok = await push(g, texts.map(allMessage)), mode = "@All";
+    if (!ok) { ok = await push(g, texts.map(t => ({ type: "text", text: t }))); mode = "chữ thường"; }
     console.log(`🎯 NHẮC MT → ${slot.hour}h → ${g}: ${ok ? "OK" : "LỖI"} (${mode})`);
   }
   // dọn dấu cũ
