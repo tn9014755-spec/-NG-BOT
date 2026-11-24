@@ -3,7 +3,7 @@
 //   trên trang /reports/home/dashboard/145 : await m.collect()   (DT theo siêu thị)
 //   trên trang /reports/home/dashboard/336 : await m.collect()   (DT theo ngành hàng)
 //   rồi (trang POS bất kỳ):                 await m.send({ key, slot: 12, dryRun })
-const BOT = "https://ng-bot-c0im.onrender.com", STORE = "28717", LS = "bcpos_today", PREV = "bcpos_prev";
+const BOT = "https://ng-bot-c0im.onrender.com", STORE = "28717", LS = "bcpos_today", PREV = "bcpos_prev", HIST = "bcpos_hist";
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const n = s => +String(s ?? "").replace(/,/g, "") || 0;
 const fmt = v => Math.round(v).toLocaleString("vi-VN").replace(/,/g, ".");
@@ -65,64 +65,143 @@ export async function collect() {
   return id === "145" ? data.store : { total: Math.round(data.cat.total), groups: Object.keys(data.cat.groups).length, rows: data.cat.rows };
 }
 
-function draw(d, prev, slot) {
+// Ảnh báo cáo kiểu dashboard (nền tối, thẻ KPI, donut Offline/Online, biểu đồ cộng dồn theo khung, thanh ngành hàng).
+function draw(d, prev, slot, hist = []) {
   const s = d.store, c = d.cat, total = s.offlineVat + s.onlineVat;
   const groups = Object.entries(c.groups).sort((a, b) => b[1] - a[1]);
   const subs = Object.entries(c.subs).sort((a, b) => b[1] - a[1]).slice(0, 8);
-  const W = 1100, RH = 40, H = 120 + 190 + 60 + (groups.length + 1) * RH + 60 + Math.ceil(subs.length / 2) * RH + 90;
-  const cv = document.createElement("canvas"); cv.width = W; cv.height = H;
-  const x = cv.getContext("2d"), F = "Arial, Helvetica, sans-serif", G = "#00853f";
-  x.fillStyle = "#fff"; x.fillRect(0, 0, W, H); x.textBaseline = "top";
-  x.fillStyle = G; x.fillRect(0, 0, W, 100);
-  x.fillStyle = "#fff"; x.font = `bold 32px ${F}`;
-  x.fillText(`BC DOANH THU ${slot === 21 ? "CHỐT NGÀY" : "KHUNG " + slot + "H"} – 28717 MỸ QƯỚI`, 24, 16);
-  x.font = `20px ${F}`; x.fillText(`Ngày ${d.date}  •  Dữ liệu POS lúc ${s.at}  •  Doanh thu có VAT`, 24, 62);
+  const pts = hist.filter(p => p.slot < slot).concat([{ slot, total, bills: s.bills }]);
+  const showTrend = pts.length >= 2;
+  const P = 32, W = 1080, CW = W - 2 * P, GAP = 18, RH = 54;
+  const C = { bg: "#0b1220", card: "#141d2f", line: "#22304a", text: "#f1f5f9", sub: "#94a3b8", dim: "#64748b", g: "#22c55e", g2: "#16a34a", b: "#38bdf8", warn: "#f59e0b", red: "#f87171" };
+  const F = "'Segoe UI', Arial, Helvetica, sans-serif";
+  const hHead = 120, hHero = 230, hKpi = 132, hTrend = showTrend ? 270 : 0, hCat = 70 + groups.length * RH + 20, hTop = 70 + Math.ceil(subs.length / 2) * 64 + 10;
+  const H = P + hHead + GAP + hHero + GAP + hKpi + GAP + (showTrend ? hTrend + GAP : 0) + hCat + GAP + hTop + 80;
+  const SC = 2, cv = document.createElement("canvas"); cv.width = W * SC; cv.height = H * SC;
+  const x = cv.getContext("2d"); x.scale(SC, SC); x.textBaseline = "alphabetic";
+  const font = (w, sz) => (x.font = `${w} ${sz}px ${F}`);
+  const txt = (t, X, Y, col, align = "left") => { x.fillStyle = col; x.textAlign = align; x.fillText(t, X, Y); x.textAlign = "left"; };
+  const rr = (X, Y, w, h, r, col) => { x.beginPath(); x.roundRect ? x.roundRect(X, Y, w, h, r) : x.rect(X, Y, w, h); x.fillStyle = col; x.fill(); };
+  const card = (X, Y, w, h) => { rr(X, Y, w, h, 18, C.card); x.strokeStyle = C.line; x.lineWidth = 1; x.beginPath(); x.roundRect ? x.roundRect(X + .5, Y + .5, w - 1, h - 1, 18) : x.rect(X, Y, w, h); x.stroke(); };
+  const fit = (t, w) => { if (x.measureText(t).width <= w) return t; while (t.length > 1 && x.measureText(t + "…").width > w) t = t.slice(0, -1); return t + "…"; };
+  const short = v => v >= 1e9 ? (v / 1e9).toFixed(2).replace(".", ",") + " tỷ" : v >= 1e6 ? (v / 1e6).toFixed(1).replace(".", ",") + "tr" : fmt(v);
+  const slotName = v => v === 21 ? "21h" : v + "h";
+  const chip = (t, X, Y, col) => { font("bold", 17); const w = x.measureText(t).width + 24; rr(X, Y, w, 32, 16, col + "26"); txt(t, X + 12, Y + 22, col); return w; };
+
+  // nền
+  x.fillStyle = C.bg; x.fillRect(0, 0, W, H);
+  const glow = x.createRadialGradient(W - 120, 0, 10, W - 120, 0, 520); glow.addColorStop(0, "rgba(34,197,94,.20)"); glow.addColorStop(1, "rgba(34,197,94,0)");
+  x.fillStyle = glow; x.fillRect(0, 0, W, 520);
+
+  // tiêu đề
+  let y = P;
+  rr(P, y + 6, 64, 64, 16, C.g); font("900", 22); txt("BHX", P + 32, y + 46, "#052e16", "center");
+  font("bold", 34); txt(slot === 21 ? "DOANH THU CHỐT NGÀY" : `DOANH THU KHUNG ${slot}H`, P + 84, y + 36, C.text);
+  font("normal", 20); txt(`Siêu thị 28717 Mỹ Qưới  •  Ngày ${d.date}  •  POS lúc ${s.at}`, P + 84, y + 68, C.sub);
+  const live = slot === 21 ? "CHỐT NGÀY" : "LIVE"; font("bold", 17); const lw = x.measureText(live).width + 40;
+  rr(W - P - lw, y + 14, lw, 34, 17, slot === 21 ? C.b + "26" : C.g + "26");
+  x.beginPath(); x.arc(W - P - lw + 17, y + 31, 5, 0, 7); x.fillStyle = slot === 21 ? C.b : C.g; x.fill();
+  txt(live, W - P - lw + 28, y + 37, slot === 21 ? C.b : C.g);
+  y += hHead + GAP - 20;
+
+  // hero: tổng DT + donut
+  card(P, y, CW, hHero);
+  font("bold", 18); txt("TỔNG DOANH THU (CÓ VAT)", P + 28, y + 44, C.sub);
+  font("900", 64); txt(fmt(total), P + 28, y + 118, C.text);
+  const tw = x.measureText(fmt(total)).width; font("bold", 28); txt("đ", P + 34 + tw, y + 118, C.sub);
+  let cxp = P + 28;
+  if (prev) {
+    const pt = prev.store.offlineVat + prev.store.onlineVat, add = total - pt;
+    cxp += chip(`▲ +${fmt(add)}đ so với ${slotName(prev.slot)}`, cxp, y + 146, add >= 0 ? C.g : C.red) + 10;
+    if (pt > 0) cxp += chip(`+${((add / pt) * 100).toFixed(1)}%`, cxp, y + 146, C.b) + 10;
+  } else chip("Khung đầu tiên trong ngày", cxp, y + 146, C.b);
+  // donut
+  const dx = W - P - 150, dy = y + hHero / 2, R = 78, off = s.offlineVat / (total || 1);
+  x.lineWidth = 24; x.lineCap = "butt";
+  x.beginPath(); x.arc(dx, dy, R, -Math.PI / 2, -Math.PI / 2 + off * Math.PI * 2); x.strokeStyle = C.g; x.stroke();
+  x.beginPath(); x.arc(dx, dy, R, -Math.PI / 2 + off * Math.PI * 2, Math.PI * 1.5); x.strokeStyle = C.b; x.stroke();
+  font("bold", 15); txt("OFFLINE", dx, dy - 4, C.sub, "center"); font("900", 26); txt(Math.round(off * 100) + "%", dx, dy + 26, C.text, "center");
+  const lx = dx - R - 230;
+  [[C.g, "Offline", s.offlineVat], [C.b, "Online", s.onlineVat]].forEach(([col, t, v], i) => {
+    const ly = dy - 34 + i * 64; rr(lx, ly - 12, 12, 12, 3, col);
+    font("normal", 17); txt(t, lx + 22, ly, C.sub); font("bold", 22); txt(fmt(v), lx + 22, ly + 28, C.text);
+  });
+  y += hHero + GAP;
+
   // KPI
-  const prevTotal = prev ? prev.store.offlineVat + prev.store.onlineVat : null;
-  const kpi = [
-    ["TỔNG DT", fmt(total), prev ? `+${fmt(total - prevTotal)} từ ${prev.slot === 21 ? "chốt" : prev.slot + "h"}` : ""],
-    ["OFFLINE", fmt(s.offlineVat), ""],
-    ["ONLINE", fmt(s.onlineVat), ""],
-    ["SỐ BILL", fmt(s.bills), prev ? `+${fmt(s.bills - prev.store.bills)} bill` : ""],
-    ["TB / BILL", s.bills ? fmt(total / s.bills) : "-", ""],
+  const per = s.bills ? total / s.bills : 0, pPer = prev && prev.store.bills ? (prev.store.offlineVat + prev.store.onlineVat) / prev.store.bills : null;
+  const top1 = groups[0];
+  const kpis = [
+    ["SỐ BILL", fmt(s.bills), prev ? `+${fmt(s.bills - prev.store.bills)} bill` : "", C.g],
+    ["TRUNG BÌNH / BILL", fmt(per) + "đ", pPer ? `${per >= pPer ? "▲" : "▼"} ${fmt(Math.abs(per - pPer))}đ` : "", per >= (pPer ?? 0) ? C.g : C.red],
+    ["NGÀNH DẪN ĐẦU", top1 ? top1[0] : "-", top1 ? `${short(top1[1])} • ${(top1[1] / (c.total || 1) * 100).toFixed(1)}%` : "", C.b],
   ];
-  const bw = (W - 48 - 4 * 12) / 5;
-  kpi.forEach(([t, v, sub], i) => {
-    const bx = 24 + i * (bw + 12), by = 120;
-    x.fillStyle = i === 0 ? "#e8f5ec" : "#f4f6f5"; x.fillRect(bx, by, bw, 160);
-    x.fillStyle = "#555"; x.font = `bold 18px ${F}`; x.fillText(t, bx + 14, by + 14);
-    x.fillStyle = i === 0 ? G : "#111"; x.font = `bold ${i === 0 ? 30 : 28}px ${F}`; x.fillText(v, bx + 14, by + 52);
-    if (sub) { x.fillStyle = "#d62828"; x.font = `bold 17px ${F}`; x.fillText(sub, bx + 14, by + 110); }
+  const kw = (CW - 2 * GAP) / 3;
+  kpis.forEach(([t, v, sub, col], i) => {
+    const kx = P + i * (kw + GAP); card(kx, y, kw, hKpi);
+    font("bold", 16); txt(t, kx + 22, y + 36, C.sub);
+    font("900", i === 2 ? 26 : 34); txt(fit(v, kw - 44), kx + 22, y + 80, C.text);
+    if (sub) { font("bold", 17); txt(fit(sub, kw - 44), kx + 22, y + 112, col); }
   });
-  // Ngành hàng
-  let y = 310;
-  x.fillStyle = "#282828"; x.fillRect(24, y, W - 48, RH);
-  x.fillStyle = "#fff"; x.font = `bold 20px ${F}`;
-  const cx = [36, 600, 800, 940];
-  ["Ngành hàng", "DT", "Tỷ trọng", prev ? "Tăng thêm" : ""].forEach((t, i) => x.fillText(t, cx[i], y + 10));
-  y += RH;
+  y += hKpi + GAP;
+
+  // biểu đồ cộng dồn theo khung
+  if (showTrend) {
+    card(P, y, CW, hTrend);
+    font("bold", 20); txt("DOANH THU CỘNG DỒN THEO KHUNG", P + 28, y + 42, C.text);
+    const gx = P + 60, gy = y + 80, gw = CW - 120, gh = hTrend - 140, mx = Math.max(...pts.map(p => p.total)) * 1.1 || 1;
+    x.strokeStyle = C.line; x.lineWidth = 1;
+    for (let k = 0; k <= 3; k++) { const yy = gy + gh - gh * k / 3; x.beginPath(); x.moveTo(gx, yy); x.lineTo(gx + gw, yy); x.stroke(); }
+    const X = i => gx + (pts.length === 1 ? gw / 2 : gw * i / (pts.length - 1)), Y = v => gy + gh - gh * v / mx;
+    const ar = x.createLinearGradient(0, gy, 0, gy + gh); ar.addColorStop(0, "rgba(34,197,94,.35)"); ar.addColorStop(1, "rgba(34,197,94,0)");
+    x.beginPath(); x.moveTo(X(0), gy + gh); pts.forEach((p, i) => x.lineTo(X(i), Y(p.total))); x.lineTo(X(pts.length - 1), gy + gh); x.closePath(); x.fillStyle = ar; x.fill();
+    x.beginPath(); pts.forEach((p, i) => i ? x.lineTo(X(i), Y(p.total)) : x.moveTo(X(i), Y(p.total))); x.strokeStyle = C.g; x.lineWidth = 4; x.lineJoin = "round"; x.stroke();
+    pts.forEach((p, i) => {
+      const last = i === pts.length - 1;
+      x.beginPath(); x.arc(X(i), Y(p.total), last ? 8 : 6, 0, 7); x.fillStyle = last ? C.g : C.bg; x.fill(); x.lineWidth = 3; x.strokeStyle = C.g; x.stroke();
+      font(last ? "900" : "bold", last ? 18 : 16); txt(short(p.total), X(i), Y(p.total) - 16, last ? C.text : C.sub, "center");
+      font("bold", 16); txt(slotName(p.slot), X(i), gy + gh + 30, last ? C.g : C.sub, "center");
+    });
+    y += hTrend + GAP;
+  }
+
+  // ngành hàng
+  card(P, y, CW, hCat);
+  font("bold", 20); txt("DOANH THU THEO NGÀNH HÀNG", P + 28, y + 42, C.text);
+  if (prev?.cat?.groups) { font("bold", 15); txt(`TĂNG THÊM TỪ ${slotName(prev.slot).toUpperCase()}`, W - P - 28, y + 42, C.dim, "right"); }
+  const mxg = groups.length ? groups[0][1] : 1, nameW = 330, barX = P + 28 + nameW, barW = CW - 56 - nameW - 300;
+  let gy2 = y + 70;
   groups.forEach(([k, v], i) => {
-    if (i % 2) { x.fillStyle = "#f7f7f7"; x.fillRect(24, y, W - 48, RH); }
-    const add = prev?.cat?.groups ? v - (prev.cat.groups[k] || 0) : null;
-    x.fillStyle = "#111"; x.font = `20px ${F}`; x.fillText(k.length > 44 ? k.slice(0, 43) + "…" : k, cx[0], y + 10);
-    x.font = `bold 20px ${F}`; x.fillText(fmt(v), cx[1], y + 10);
-    x.font = `20px ${F}`; x.fillText((c.total ? v / c.total * 100 : 0).toFixed(1) + "%", cx[2], y + 10);
-    if (add !== null) { x.fillStyle = add > 0 ? G : "#888"; x.fillText((add > 0 ? "+" : "") + fmt(add), cx[3], y + 10); }
-    y += RH;
+    const add = prev?.cat?.groups ? v - (prev.cat.groups[k] || 0) : null, pct = c.total ? v / c.total * 100 : 0;
+    font("bold", 16); txt(String(i + 1).padStart(2, "0"), P + 28, gy2 + 32, C.dim);
+    font("normal", 19); txt(fit(k, nameW - 46), P + 64, gy2 + 32, C.text);
+    rr(barX, gy2 + 16, barW, 22, 11, "#1e293b");
+    const bw = Math.max(8, barW * v / mxg), bg = x.createLinearGradient(barX, 0, barX + bw, 0); bg.addColorStop(0, C.g2); bg.addColorStop(1, i < 3 ? C.g : "#4ade80");
+    rr(barX, gy2 + 16, bw, 22, 11, bg);
+    font("bold", 19); txt(fmt(v), barX + barW + 158, gy2 + 34, C.text, "right");
+    font("normal", 16); txt(pct.toFixed(1) + "%", barX + barW + 222, gy2 + 34, C.sub, "right");
+    if (add !== null) { font("bold", 17); txt(add > 0 ? "+" + short(add) : "–", W - P - 28, gy2 + 34, add > 0 ? C.g : C.dim, "right"); }
+    if (i < groups.length - 1) { x.strokeStyle = C.line; x.lineWidth = 1; x.beginPath(); x.moveTo(P + 28, gy2 + RH); x.lineTo(W - P - 28, gy2 + RH); x.stroke(); }
+    gy2 += RH;
   });
-  x.fillStyle = "#e8f5ec"; x.fillRect(24, y, W - 48, RH);
-  x.fillStyle = G; x.font = `bold 20px ${F}`; x.fillText("TỔNG", cx[0], y + 10); x.fillText(fmt(c.total), cx[1], y + 10); x.fillText("100%", cx[2], y + 10);
-  y += RH + 20;
-  x.fillStyle = "#111"; x.font = `bold 22px ${F}`; x.fillText("TOP NHÓM HÀNG BÁN CHẠY", 24, y); y += 36;
+  y += hCat + GAP;
+
+  // top nhóm hàng
+  card(P, y, CW, hTop);
+  font("bold", 20); txt("TOP NHÓM HÀNG BÁN CHẠY", P + 28, y + 42, C.text);
+  const tw2 = (CW - 56 - GAP) / 2, mxs = subs.length ? subs[0][1] : 1, medal = ["#facc15", "#cbd5e1", "#f59e0b"];
   subs.forEach(([k, v], i) => {
-    const col = i % 2, row = Math.floor(i / 2), bx = 24 + col * ((W - 48) / 2), by = y + row * RH;
-    x.fillStyle = "#111"; x.font = `20px ${F}`; x.fillText(`${i + 1}. ${k.length > 26 ? k.slice(0, 25) + "…" : k}`, bx + 8, by + 8);
-    x.font = `bold 20px ${F}`; x.fillText(fmt(v), bx + 380, by + 8);
+    const col = i % 2, row = Math.floor(i / 2), bx = P + 28 + col * (tw2 + GAP), by = y + 66 + row * 64;
+    rr(bx, by, 36, 36, 18, i < 3 ? medal[i] : "#1e293b"); font("900", 17); txt(String(i + 1), bx + 18, by + 24, i < 3 ? "#0b1220" : C.sub, "center");
+    font("normal", 18); txt(fit(k, tw2 - 200), bx + 50, by + 18, C.text);
+    rr(bx + 50, by + 30, tw2 - 200, 6, 3, "#1e293b"); rr(bx + 50, by + 30, Math.max(6, (tw2 - 200) * v / mxs), 6, 3, C.b);
+    font("bold", 19); txt(fmt(v), bx + tw2, by + 26, C.text, "right");
   });
-  y += Math.ceil(subs.length / 2) * RH + 16;
-  x.fillStyle = "#666"; x.font = `17px ${F}`;
-  x.fillText("Nguồn: POS – Doanh thu theo siêu thị (145) & Doanh thu theo ngành hàng (336).", 24, y);
-  if (Math.abs(c.total - total) > 1000) { x.fillStyle = "#d62828"; x.fillText(`⚠ Tổng ngành hàng lệch DT siêu thị ${fmt(c.total - total)}đ (2 báo cáo lấy cách nhau vài phút).`, 24, y + 26); }
+  y += hTop + 24;
+
+  // chân trang
+  font("normal", 15); txt("Nguồn: POS Bách Hoá Xanh – DT theo siêu thị (145) & DT theo ngành hàng (336). Doanh thu có VAT.", P, y + 6, C.dim);
+  if (Math.abs(c.total - total) > 1000) { font("bold", 15); txt(`⚠ Tổng ngành hàng lệch DT siêu thị ${fmt(c.total - total)}đ (2 báo cáo lấy cách nhau vài phút).`, P, y + 30, C.warn); }
   return cv;
 }
 
@@ -133,11 +212,12 @@ export async function send({ key, slot, dryRun = false, to } = {}) {
   let prev = load(PREV); if (!prev || prev.date !== d.date || prev.slot >= slot) prev = null;
   const check = { total: Math.round(total), catTotal: Math.round(d.cat.total), diff: Math.round(d.cat.total - total), bills: d.store.bills, prevSlot: prev?.slot || null, prevTotal: prev ? Math.round(prev.store.offlineVat + prev.store.onlineVat) : null };
   if (dryRun) return check;
-  const cv = draw(d, prev, slot), image = cv.toDataURL("image/png");
+  let hist = load(HIST); hist = hist && hist.date === d.date ? hist.points : [];
+  const cv = draw(d, prev, slot, hist), image = cv.toDataURL("image/jpeg", 0.9);
   const text = `📊 BC DOANH THU ${slot === 21 ? "CHỐT NGÀY" : slot + "H"} – 28717\n💰 ${fmt(total)}đ  •  🧾 ${d.store.bills} bill` + batteryLine(await battery());
   const r = await fetch(BOT + "/api/flash-sale", { method: "POST", headers: { "Content-Type": "application/json", "x-push-key": key }, body: JSON.stringify({ image, text, to }) });
   const res = await r.text();
-  if (r.ok) save(PREV, { ...d, slot });
+  if (r.ok) { save(PREV, { ...d, slot }); saveHist(d.date, slot, total, d.store.bills); }
   return { ...check, status: r.status, result: res };
 }
 
@@ -156,8 +236,15 @@ export function report({ slot } = {}) {
     groups: Object.entries(d.cat.groups).sort((a, b) => b[1] - a[1]).map(([k, v]) => ({ name: k, dt: Math.round(v), pct: +(v / d.cat.total * 100).toFixed(1), add: prev?.cat?.groups ? Math.round(v - (prev.cat.groups[k] || 0)) : null })),
     top: Object.entries(d.cat.subs).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([k, v]) => ({ name: k, dt: Math.round(v) })),
   };
-  save(PREV, { ...d, slot });
+  save(PREV, { ...d, slot }); saveHist(d.date, slot, total, d.store.bills);
   return out;
+}
+
+// Lưu DT cộng dồn từng khung trong ngày để vẽ biểu đồ.
+function saveHist(date, slot, total, bills) {
+  const h = load(HIST), pts = (h && h.date === date ? h.points : []).filter(p => p.slot !== slot);
+  pts.push({ slot, total, bills }); pts.sort((a, b) => a.slot - b.slot);
+  save(HIST, { date, points: pts });
 }
 
 export async function battery() {
