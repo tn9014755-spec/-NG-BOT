@@ -73,7 +73,7 @@ function draw(d, prev, slot, hist = []) {
   const pts = hist.filter(p => p.slot < slot).concat([{ slot, total, bills: s.bills }]);
   const showTrend = pts.length >= 2;
   const P = 32, W = 1080, CW = W - 2 * P, GAP = 18, RH = 54;
-  const C = { bg: "#0b1220", card: "#141d2f", line: "#22304a", text: "#f1f5f9", sub: "#94a3b8", dim: "#64748b", g: "#22c55e", g2: "#16a34a", b: "#38bdf8", warn: "#f59e0b", red: "#f87171" };
+  const C = { bg: "#eef3f0", card: "#ffffff", line: "#e3e9e6", text: "#0f1f17", sub: "#5b6b63", dim: "#94a39b", g: "#16a34a", g2: "#15803d", b: "#0284c7", warn: "#b45309", red: "#dc2626", track: "#edf2ef" };
   const F = "'Segoe UI', Arial, Helvetica, sans-serif";
   const hHead = 120, hHero = 230, hKpi = 132, hTrend = showTrend ? 270 : 0, hCat = 70 + groups.length * RH + 20, hTop = 70 + Math.ceil(subs.length / 2) * 64 + 10;
   const H = P + hHead + GAP + hHero + GAP + hKpi + GAP + (showTrend ? hTrend + GAP : 0) + hCat + GAP + hTop + 80;
@@ -82,7 +82,7 @@ function draw(d, prev, slot, hist = []) {
   const font = (w, sz) => (x.font = `${w} ${sz}px ${F}`);
   const txt = (t, X, Y, col, align = "left") => { x.fillStyle = col; x.textAlign = align; x.fillText(t, X, Y); x.textAlign = "left"; };
   const rr = (X, Y, w, h, r, col) => { x.beginPath(); x.roundRect ? x.roundRect(X, Y, w, h, r) : x.rect(X, Y, w, h); x.fillStyle = col; x.fill(); };
-  const card = (X, Y, w, h) => { rr(X, Y, w, h, 18, C.card); x.strokeStyle = C.line; x.lineWidth = 1; x.beginPath(); x.roundRect ? x.roundRect(X + .5, Y + .5, w - 1, h - 1, 18) : x.rect(X, Y, w, h); x.stroke(); };
+  const card = (X, Y, w, h) => { x.save(); x.shadowColor = "rgba(15,31,23,.08)"; x.shadowBlur = 18; x.shadowOffsetY = 4; rr(X, Y, w, h, 18, C.card); x.restore(); x.strokeStyle = C.line; x.lineWidth = 1; x.beginPath(); x.roundRect ? x.roundRect(X + .5, Y + .5, w - 1, h - 1, 18) : x.rect(X, Y, w, h); x.stroke(); };
   const fit = (t, w) => { if (x.measureText(t).width <= w) return t; while (t.length > 1 && x.measureText(t + "…").width > w) t = t.slice(0, -1); return t + "…"; };
   const short = v => v >= 1e9 ? (v / 1e9).toFixed(2).replace(".", ",") + " tỷ" : v >= 1e6 ? (v / 1e6).toFixed(1).replace(".", ",") + "tr" : fmt(v);
   const slotName = v => v === 21 ? "21h" : v + "h";
@@ -90,12 +90,12 @@ function draw(d, prev, slot, hist = []) {
 
   // nền
   x.fillStyle = C.bg; x.fillRect(0, 0, W, H);
-  const glow = x.createRadialGradient(W - 120, 0, 10, W - 120, 0, 520); glow.addColorStop(0, "rgba(34,197,94,.20)"); glow.addColorStop(1, "rgba(34,197,94,0)");
+  const glow = x.createRadialGradient(W - 120, 0, 10, W - 120, 0, 520); glow.addColorStop(0, "rgba(34,197,94,.18)"); glow.addColorStop(1, "rgba(34,197,94,0)");
   x.fillStyle = glow; x.fillRect(0, 0, W, 520);
 
   // tiêu đề
   let y = P;
-  rr(P, y + 6, 64, 64, 16, C.g); font("900", 22); txt("BHX", P + 32, y + 46, "#052e16", "center");
+  rr(P, y + 6, 64, 64, 16, C.g); font("900", 22); txt("BHX", P + 32, y + 46, "#ffffff", "center");
   font("bold", 34); txt(slot === 21 ? "DOANH THU CHỐT NGÀY" : `DOANH THU KHUNG ${slot}H`, P + 84, y + 36, C.text);
   font("normal", 20); txt(`Siêu thị 28717 Mỹ Qưới  •  Ngày ${d.date}  •  POS lúc ${s.at}`, P + 84, y + 68, C.sub);
   const live = slot === 21 ? "CHỐT NGÀY" : "LIVE"; font("bold", 17); const lw = x.measureText(live).width + 40;
@@ -153,12 +153,12 @@ function draw(d, prev, slot, hist = []) {
     x.strokeStyle = C.line; x.lineWidth = 1;
     for (let k = 0; k <= 3; k++) { const yy = gy + gh - gh * k / 3; x.beginPath(); x.moveTo(gx, yy); x.lineTo(gx + gw, yy); x.stroke(); }
     const X = i => gx + (pts.length === 1 ? gw / 2 : gw * i / (pts.length - 1)), Y = v => gy + gh - gh * v / mx;
-    const ar = x.createLinearGradient(0, gy, 0, gy + gh); ar.addColorStop(0, "rgba(34,197,94,.35)"); ar.addColorStop(1, "rgba(34,197,94,0)");
+    const ar = x.createLinearGradient(0, gy, 0, gy + gh); ar.addColorStop(0, "rgba(22,163,74,.22)"); ar.addColorStop(1, "rgba(34,197,94,0)");
     x.beginPath(); x.moveTo(X(0), gy + gh); pts.forEach((p, i) => x.lineTo(X(i), Y(p.total))); x.lineTo(X(pts.length - 1), gy + gh); x.closePath(); x.fillStyle = ar; x.fill();
     x.beginPath(); pts.forEach((p, i) => i ? x.lineTo(X(i), Y(p.total)) : x.moveTo(X(i), Y(p.total))); x.strokeStyle = C.g; x.lineWidth = 4; x.lineJoin = "round"; x.stroke();
     pts.forEach((p, i) => {
       const last = i === pts.length - 1;
-      x.beginPath(); x.arc(X(i), Y(p.total), last ? 8 : 6, 0, 7); x.fillStyle = last ? C.g : C.bg; x.fill(); x.lineWidth = 3; x.strokeStyle = C.g; x.stroke();
+      x.beginPath(); x.arc(X(i), Y(p.total), last ? 8 : 6, 0, 7); x.fillStyle = last ? C.g : C.card; x.fill(); x.lineWidth = 3; x.strokeStyle = C.g; x.stroke();
       font(last ? "900" : "bold", last ? 18 : 16); txt(short(p.total), X(i), Y(p.total) - 16, last ? C.text : C.sub, "center");
       font("bold", 16); txt(slotName(p.slot), X(i), gy + gh + 30, last ? C.g : C.sub, "center");
     });
@@ -175,8 +175,8 @@ function draw(d, prev, slot, hist = []) {
     const add = prev?.cat?.groups ? v - (prev.cat.groups[k] || 0) : null, pct = c.total ? v / c.total * 100 : 0;
     font("bold", 16); txt(String(i + 1).padStart(2, "0"), P + 28, gy2 + 32, C.dim);
     font("normal", 19); txt(fit(k, nameW - 46), P + 64, gy2 + 32, C.text);
-    rr(barX, gy2 + 16, barW, 22, 11, "#1e293b");
-    const bw = Math.max(8, barW * v / mxg), bg = x.createLinearGradient(barX, 0, barX + bw, 0); bg.addColorStop(0, C.g2); bg.addColorStop(1, i < 3 ? C.g : "#4ade80");
+    rr(barX, gy2 + 16, barW, 22, 11, C.track);
+    const bw = Math.max(8, barW * v / mxg), bg = x.createLinearGradient(barX, 0, barX + bw, 0); bg.addColorStop(0, C.g2); bg.addColorStop(1, i < 3 ? "#22c55e" : "#4ade80");
     rr(barX, gy2 + 16, bw, 22, 11, bg);
     font("bold", 19); txt(fmt(v), barX + barW + 158, gy2 + 34, C.text, "right");
     font("normal", 16); txt(pct.toFixed(1) + "%", barX + barW + 222, gy2 + 34, C.sub, "right");
@@ -189,12 +189,12 @@ function draw(d, prev, slot, hist = []) {
   // top nhóm hàng
   card(P, y, CW, hTop);
   font("bold", 20); txt("TOP NHÓM HÀNG BÁN CHẠY", P + 28, y + 42, C.text);
-  const tw2 = (CW - 56 - GAP) / 2, mxs = subs.length ? subs[0][1] : 1, medal = ["#facc15", "#cbd5e1", "#f59e0b"];
+  const tw2 = (CW - 56 - GAP) / 2, mxs = subs.length ? subs[0][1] : 1, medal = ["#eab308", "#94a3b8", "#c2710c"];
   subs.forEach(([k, v], i) => {
     const col = i % 2, row = Math.floor(i / 2), bx = P + 28 + col * (tw2 + GAP), by = y + 66 + row * 64;
-    rr(bx, by, 36, 36, 18, i < 3 ? medal[i] : "#1e293b"); font("900", 17); txt(String(i + 1), bx + 18, by + 24, i < 3 ? "#0b1220" : C.sub, "center");
+    rr(bx, by, 36, 36, 18, i < 3 ? medal[i] : C.track); font("900", 17); txt(String(i + 1), bx + 18, by + 24, i < 3 ? "#ffffff" : C.sub, "center");
     font("normal", 18); txt(fit(k, tw2 - 200), bx + 50, by + 18, C.text);
-    rr(bx + 50, by + 30, tw2 - 200, 6, 3, "#1e293b"); rr(bx + 50, by + 30, Math.max(6, (tw2 - 200) * v / mxs), 6, 3, C.b);
+    rr(bx + 50, by + 30, tw2 - 200, 6, 3, C.track); rr(bx + 50, by + 30, Math.max(6, (tw2 - 200) * v / mxs), 6, 3, C.b);
     font("bold", 19); txt(fmt(v), bx + tw2, by + 26, C.text, "right");
   });
   y += hTop + 24;
