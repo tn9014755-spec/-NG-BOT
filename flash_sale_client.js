@@ -132,7 +132,25 @@ export default async function run({ key, send = false, to } = {}) {
   const dataUrl = canvas.toDataURL("image/png");
   const summary = items.map(it => `${it.group} | ${it.name} | ${it.price} | ${it.old} | ${it.slotLabel}`);
   if (!send) return { area, slots: slotNames, count: items.length, summary, imageBytes: Math.round(dataUrl.length * 0.75) };
-  const text = `🛒 FLASH SALE BHX HÔM NAY\nSữa · Bia · Nước giải khát – ${items.length} sản phẩm`;
+  const text = `🛒 FLASH SALE BHX HÔM NAY\nSữa · Bia · Nước giải khát – ${items.length} sản phẩm` + batteryLine(await battery());
   const r = await fetch(BOT + "/api/flash-sale", { method: "POST", headers: { "Content-Type": "application/json", "x-push-key": key }, body: JSON.stringify({ image: dataUrl, text, to }) });
   return { area, slots: slotNames, count: items.length, summary, status: r.status, result: await r.text() };
+}
+
+export async function battery() {
+  try { const b = await navigator.getBattery(); return { charging: b.charging, level: Math.round(b.level * 100), minutesLeft: isFinite(b.dischargingTime) ? Math.round(b.dischargingTime / 60) : null }; } catch { return null; }
+}
+export function batteryLine(b) {
+  if (!b || b.charging) return "";
+  const t = b.minutesLeft ? ` (còn khoảng ${Math.floor(b.minutesLeft / 60)}h${String(b.minutesLeft % 60).padStart(2, "0")})` : "";
+  return `\n🔋 MÁY CHẠY BÁO CÁO CHƯA CẮM SẠC – pin còn ${b.level}%${t}. Nhờ cắm sạc giúp!`;
+}
+// Gửi riêng cảnh báo pin (chỉ gửi khi chưa cắm sạc, trừ khi force).
+export async function batteryAlert({ key, force = false, to } = {}) {
+  const b = await battery();
+  if (!b) return { ok: false, error: "không đọc được pin" };
+  if (b.charging && !force) return { ...b, sent: false };
+  const text = b.charging ? `🔌 Máy chạy báo cáo đang cắm sạc – pin ${b.level}%.` : batteryLine(b).trim();
+  const r = await fetch("https://ng-bot-c0im.onrender.com/api/flash-sale", { method: "POST", headers: { "Content-Type": "application/json", "x-push-key": key }, body: JSON.stringify({ text, to }) });
+  return { ...b, sent: r.ok, status: r.status, result: await r.text() };
 }

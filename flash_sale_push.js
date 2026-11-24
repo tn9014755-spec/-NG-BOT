@@ -46,6 +46,13 @@ module.exports = function register(app, { push, targets }) {
     if (!keyOk(req.get("x-push-key"))) return res.status(401).json({ ok: false, error: "sai khoá" });
     try {
       const raw = String(req.body?.image || "").replace(/^data:image\/\w+;base64,/, "");
+      const env0 = String(process.env.FLASH_SALE_TO || "").split(/[;,\s]+/).filter(Boolean);
+      if (!raw && req.body?.text) {
+        const to0 = req.body?.to ? [String(req.body.to)] : (env0.length ? env0 : targets());
+        if (!to0.length) return res.status(400).json({ ok: false, error: "chưa có nhóm nhận" });
+        const rs = []; for (const t of to0) rs.push(await push(t, [{ type: "text", text: String(req.body.text).slice(0, 4900) }]));
+        return res.json({ ok: rs.every(Boolean), sent: rs.filter(Boolean).length, groups: to0.length });
+      }
       const buf = Buffer.from(raw, "base64");
       const isPng = buf.slice(0, 4).toString("hex") === "89504e47", isJpg = buf.slice(0, 2).toString("hex") === "ffd8";
       if (!isPng && !isJpg) return res.status(400).json({ ok: false, error: "ảnh phải là PNG hoặc JPEG" });

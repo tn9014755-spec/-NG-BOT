@@ -134,7 +134,7 @@ export async function send({ key, slot, dryRun = false, to } = {}) {
   const check = { total: Math.round(total), catTotal: Math.round(d.cat.total), diff: Math.round(d.cat.total - total), bills: d.store.bills, prevSlot: prev?.slot || null, prevTotal: prev ? Math.round(prev.store.offlineVat + prev.store.onlineVat) : null };
   if (dryRun) return check;
   const cv = draw(d, prev, slot), image = cv.toDataURL("image/png");
-  const text = `📊 BC DOANH THU ${slot === 21 ? "CHỐT NGÀY" : slot + "H"} – 28717\n💰 ${fmt(total)}đ  •  🧾 ${d.store.bills} bill`;
+  const text = `📊 BC DOANH THU ${slot === 21 ? "CHỐT NGÀY" : slot + "H"} – 28717\n💰 ${fmt(total)}đ  •  🧾 ${d.store.bills} bill` + batteryLine(await battery());
   const r = await fetch(BOT + "/api/flash-sale", { method: "POST", headers: { "Content-Type": "application/json", "x-push-key": key }, body: JSON.stringify({ image, text, to }) });
   const res = await r.text();
   if (r.ok) save(PREV, { ...d, slot });
@@ -158,4 +158,22 @@ export function report({ slot } = {}) {
   };
   save(PREV, { ...d, slot });
   return out;
+}
+
+export async function battery() {
+  try { const b = await navigator.getBattery(); return { charging: b.charging, level: Math.round(b.level * 100), minutesLeft: isFinite(b.dischargingTime) ? Math.round(b.dischargingTime / 60) : null }; } catch { return null; }
+}
+export function batteryLine(b) {
+  if (!b || b.charging) return "";
+  const t = b.minutesLeft ? ` (còn khoảng ${Math.floor(b.minutesLeft / 60)}h${String(b.minutesLeft % 60).padStart(2, "0")})` : "";
+  return `\n🔋 MÁY CHẠY BÁO CÁO CHƯA CẮM SẠC – pin còn ${b.level}%${t}. Nhờ cắm sạc giúp!`;
+}
+// Gửi riêng cảnh báo pin (chỉ gửi khi chưa cắm sạc, trừ khi force).
+export async function batteryAlert({ key, force = false, to } = {}) {
+  const b = await battery();
+  if (!b) return { ok: false, error: "không đọc được pin" };
+  if (b.charging && !force) return { ...b, sent: false };
+  const text = b.charging ? `🔌 Máy chạy báo cáo đang cắm sạc – pin ${b.level}%.` : batteryLine(b).trim();
+  const r = await fetch("https://ng-bot-c0im.onrender.com/api/flash-sale", { method: "POST", headers: { "Content-Type": "application/json", "x-push-key": key }, body: JSON.stringify({ text, to }) });
+  return { ...b, sent: r.ok, status: r.status, result: await r.text() };
 }
