@@ -168,6 +168,7 @@ function validDate(s){return/^\d{4}-\d{2}-\d{2}$/.test(s)&&!isNaN(new Date(`${s}
 async function serveData(res,data){if(!data)return noReport(res);try{res.type("html").send(applyTemplate(await downloadTemplate(),data))}catch(e){console.error("❌ BC VIEW ERROR",e);res.status(500).send("Không tải được khuôn mẫu báo cáo.")}}
 app.use((req,res,next)=>{if(req.path==="/webhook"){let b=[];req.on("data",c=>b.push(c));req.on("end",()=>{req.rawBody=Buffer.concat(b);try{req.body=JSON.parse(req.rawBody.toString("utf8")||"{}")}catch(err){console.error("WEBHOOK JSON ERROR",err);req.body={}}next()})}else next()});
 app.get("/",(_,res)=>res.send("NG-BOT READY - NẠP DỮ LIỆU / DATA / LỊCH HỌP / PING"));
+require("./flash_sale_push")(app,{push,targets:mtReminder.targets});
 app.get("/health",(_,res)=>res.json({ok:true,bot:"NG-BOT",token:!!TOKEN,secret:!!SECRET,timezone:meeting.TZ,meetings:meeting.list().length}));
 app.get("/bc/moi-nhat",async(_,res)=>{try{const local=latestLocalJson();if(local)return serveData(res,local.data);const x=await latestJson();await serveData(res,x&&x.data)}catch(e){console.error("❌ BC LATEST ERROR",e);noReport(res)}});
 app.get("/bc/:date",async(req,res)=>{const date=req.params.date;if(date==="moi-nhat")return res.redirect("/bc/moi-nhat");if(!validDate(date))return noReport(res);try{const local=readLocalJson(`bc-${date}.json`);if(local)return serveData(res,local);await serveData(res,await readJson(`bc-${date}.json`))}catch(e){console.error(`❌ BC ${date} ERROR`,e);noReport(res)}});

@@ -61,4 +61,4 @@ function start(push) {
   tick(push).catch(e => console.error("❌ NHẮC MT", e));
 }
 
-module.exports = { start, enable, disable, isOn, scheduleText };
+module.exports = { start, enable, disable, isOn, scheduleText, targets };
