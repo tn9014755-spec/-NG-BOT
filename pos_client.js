@@ -140,3 +140,22 @@ export async function send({ key, slot, dryRun = false, to } = {}) {
   if (r.ok) save(PREV, { ...d, slot });
   return { ...check, status: r.status, result: res };
 }
+
+// Báo cáo không gửi LINE: trả số liệu đã tính sẵn (kèm phần tăng thêm so với khung trước) và ghi nhớ khung này.
+export function report({ slot } = {}) {
+  const d = load(LS);
+  if (!d || d.date !== today() || !d.store || !d.cat) throw Error("Chưa đủ dữ liệu hôm nay: chạy collect() ở trang 145 và 336 trước");
+  let prev = load(PREV); if (!prev || prev.date !== d.date || prev.slot >= slot) prev = null;
+  const total = d.store.offlineVat + d.store.onlineVat, ptotal = prev ? prev.store.offlineVat + prev.store.onlineVat : null;
+  const out = {
+    date: d.date, slot, posAt: d.store.at,
+    total: Math.round(total), offline: Math.round(d.store.offlineVat), online: Math.round(d.store.onlineVat),
+    bills: d.store.bills, perBill: d.store.bills ? Math.round(total / d.store.bills) : 0,
+    catTotal: Math.round(d.cat.total), diff: Math.round(d.cat.total - total),
+    prevSlot: prev?.slot || null, addTotal: prev ? Math.round(total - ptotal) : null, addBills: prev ? d.store.bills - prev.store.bills : null,
+    groups: Object.entries(d.cat.groups).sort((a, b) => b[1] - a[1]).map(([k, v]) => ({ name: k, dt: Math.round(v), pct: +(v / d.cat.total * 100).toFixed(1), add: prev?.cat?.groups ? Math.round(v - (prev.cat.groups[k] || 0)) : null })),
+    top: Object.entries(d.cat.subs).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([k, v]) => ({ name: k, dt: Math.round(v) })),
+  };
+  save(PREV, { ...d, slot });
+  return out;
+}
