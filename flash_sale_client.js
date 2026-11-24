@@ -117,8 +117,9 @@ function draw(data, meta) {
 
 export default async function run({ key, send = false, to } = {}) {
   if (!location.pathname.startsWith("/khuyen-mai")) throw Error("Hãy mở bachhoaxanh.com/khuyen-mai trước");
-  const header = document.querySelector("header")?.innerText || "";
-  if (/Đăng nhập/.test(header) && !/Tài khoản/.test(header)) throw Error("Chưa đăng nhập bachhoaxanh.com");
+  let header = "";
+  for (let i = 0; i < 30; i++) { header = document.querySelector("header")?.innerText || ""; if (/Tài khoản/.test(header)) break; await sleep(500); }
+  if (!/Tài khoản/.test(header)) throw Error("Chưa đăng nhập bachhoaxanh.com");
   const area = (header.match(/Giao đến:\s*\n?([^\n]+)/) || [])[1] || "chưa chọn địa chỉ";
   const { slotNames, items } = await scan();
   const order = { "SỮA": 0, "NƯỚC GIẢI KHÁT": 1, "BIA": 2 };
