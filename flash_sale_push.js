@@ -29,6 +29,10 @@ module.exports = function register(app, { push, targets }) {
     cors(res); res.set("Cache-Control", "no-store");
     res.type("application/javascript").send(fs.readFileSync(path.join(__dirname, "flash_sale_client.js"), "utf8"));
   });
+  app.get("/bc-pos/client.js", (_, res) => {
+    cors(res); res.set("Cache-Control", "no-store");
+    res.type("application/javascript").send(fs.readFileSync(path.join(__dirname, "pos_client.js"), "utf8"));
+  });
   app.get("/flash-sale/:name", (req, res) => {
     const name = path.basename(req.params.name);
     if (!/^[\w-]+\.(png|jpg)$/.test(name)) return res.status(404).end();
