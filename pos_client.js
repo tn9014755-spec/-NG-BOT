@@ -31,9 +31,10 @@ async function runReport() {
   }
   if (!node) throw Error("Không tìm thấy siêu thị " + STORE);
   tree.jstree("deselect_all"); tree.jstree("select_node", node.closest("li").id); await sleep(500);
-  const done = [...document.querySelectorAll("button")].find(b => b.innerText.trim() === "Xong" && b.offsetParent);
+  const done = [...document.querySelectorAll("button")].find(b => b.innerText.trim() === "Xong");
   done && done.click(); await sleep(800);
-  if (!/1 Siêu thị được chọn/.test(document.body.innerText)) throw Error("Chưa chọn được đúng 1 siêu thị");
+  const picked = [...document.querySelectorAll("input")].some(i => /^1 Siêu thị được chọn/.test(i.value || ""));
+  if (!picked) throw Error("Chưa chọn được đúng 1 siêu thị");
   const grid = $(".k-grid").first().data("kendoGrid");
   grid.dataSource.data([]);
   [...document.querySelectorAll("button,a")].find(b => b.innerText.trim() === "Xem báo cáo").click();
