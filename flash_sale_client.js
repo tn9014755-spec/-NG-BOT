@@ -42,11 +42,19 @@ async function scan() {
   const slots = [...main.querySelectorAll("*")].filter(e => e.children.length === 0 && /^\d+h - \d+h$/.test(e.innerText?.trim() || ""));
   if (!slots.length) throw Error("Không thấy các khung giờ Flash Sale");
   const items = new Map(), slotNames = [];
+  const lastLabel = slots[slots.length - 1].innerText.trim();
+  const slotBody = () => { const t = main.innerText; return t.slice(t.lastIndexOf(lastLabel)).split("Bán hàng 7:30")[0]; };
+  const priceCount = () => slotBody().split("\n").filter(x => PRICE.test(x.trim())).length;
   for (const s of slots) {
     const label = s.innerText.trim(); slotNames.push(label);
-    s.click(); await sleep(2500);
-    const t = main.innerText, a = t.lastIndexOf(slots[slots.length - 1].innerText.trim());
-    const body = t.slice(a).split("Bán hàng 7:30")[0];
+    window.scrollTo(0, 0); s.click(); await sleep(2500);
+    // Danh sách tải dần khi cuộn (khung đang diễn ra có thể vài chục món): cuộn tới khi số giá đứng yên 3 lần liền.
+    let prev = -1, still = 0;
+    for (let k = 0; k < 40 && still < 3; k++) {
+      window.scrollTo(0, document.body.scrollHeight); await sleep(1200);
+      const n = priceCount(); still = n === prev ? still + 1 : 0; prev = n;
+    }
+    const body = slotBody();
     for (const it of parseSlot(body)) {
       const k = it.name + "|" + it.price;
       if (!items.has(k)) items.set(k, { ...it, group: groupOf(it.name), slots: [] });
