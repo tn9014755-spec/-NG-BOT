@@ -10,7 +10,7 @@ const fmt = n => n.toLocaleString("vi-VN").replace(/,/g, ".");
 
 function groupOf(name) {
   const n = name.toLowerCase();
-  if (/sữa tắm|sữa rửa|rửa mặt|dưỡng thể|dưỡng da|cà phê|kem |bánh|kẹo|ngũ cốc|bột giặt/.test(n)) return null;
+  if (/sữa tắm|sữa rửa|rửa mặt|dưỡng thể|dưỡng da|cà phê|kem |bánh|kẹo|ngũ cốc|bột giặt|ghẹ|\bcua\b|tôm|\bcá |mực|\brim\b|chà bông/.test(n)) return null;
   if (/\bbia\b|somersby|lên men|cocktail|vodka|soju|rượu/.test(n)) return "BIA";
   if (/sữa|ensure|milo|ovaltine|yakult|probi/.test(n)) return "SỮA";
   if (/nước giặt|nước xả|nước rửa|nước lau|nước mắm|nước tương|nước chấm|nước tẩy|nước hoa|nước súc/.test(n)) return null;
@@ -129,7 +129,18 @@ export default async function run({ key, send = false, to } = {}) {
   for (let i = 0; i < 30; i++) { header = document.querySelector("header")?.innerText || ""; if (/Tài khoản/.test(header)) break; await sleep(500); }
   if (!/Tài khoản/.test(header)) throw Error("Chưa đăng nhập bachhoaxanh.com");
   const area = (header.match(/Giao đến:\s*\n?([^\n]+)/) || [])[1] || "chưa chọn địa chỉ";
-  const { slotNames, items } = await scan();
+  // Quét có thể lâu hơn 45s (khung đang diễn ra tải dần vài chục món) nên chạy nền và lưu ở window:
+  // lần gọi chưa xong trả {pending:true}; gọi lại sẽ chờ tiếp cùng lượt quét. Lệnh gửi (send:true) dùng lại
+  // kết quả quét < 10 phút để ảnh gửi đi khớp đúng danh sách vừa kiểm tra.
+  const W = window, fresh = W.__fsScan && Date.now() - W.__fsScan.at < 10 * 60e3;
+  if (!(send && fresh)) {
+    if (!W.__fsJob) W.__fsJob = scan().then(d => { W.__fsScan = { at: Date.now(), data: d }; }).finally(() => { W.__fsJob = null; });
+    const job = W.__fsJob;
+    const done = await Promise.race([job.then(() => true), sleep(38e3).then(() => false)]);
+    if (!done) return { pending: true, message: "Đang quét Flash Sale (danh sách dài, cần cuộn để tải). Chạy lại đúng lệnh này sau khoảng 20–30 giây để lấy kết quả." };
+  }
+  const { slotNames, items: raw } = W.__fsScan.data;
+  const items = raw.map(it => ({ ...it }));
   const order = { "SỮA": 0, "NƯỚC GIẢI KHÁT": 1, "BIA": 2 };
   items.forEach(it => it.slotLabel = slotText(it.slots, slotNames));
   items.sort((a, b) => order[a.group] - order[b.group] || ((b.old ? 1 - b.price / b.old : 0) - (a.old ? 1 - a.price / a.old : 0)));
