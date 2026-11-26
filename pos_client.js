@@ -53,13 +53,17 @@ export async function collect() {
     const r = rows.find(x => String(x.storeid) === STORE) || rows[0];
     data.store = { name: r.storename, offline: n(r.revenueoffline), offlineVat: n(r.revenueofflinevat), online: n(r.revenueonline), onlineVat: n(r.revenueonlinevat), bills: n(r.totalvoucher), at: nowHM(), reportDate: r.datekey };
   } else {
-    const g = {}, sub = {};
+    const g = {}, sub = {}, mine = rows.filter(r => String(r.storeid).startsWith(STORE));
+    // DT chưa VAT theo ngành: dùng cột chưa VAT nếu báo cáo có (và hợp lý so với cột có VAT), không thì quy đổi theo tỉ lệ ở send().
+    const sumK = k => mine.reduce((a, r) => a + n(r[k]), 0), sv = sumK("revenuevat");
+    const preKey = ["revenue", "revenuenovat", "revenuewithoutvat", "revenuebeforevat"].find(k => mine.length && k in mine[0] && sumK(k) > sv * 0.85 && sumK(k) <= sv);
     for (const r of rows) {
       if (!String(r.storeid).startsWith(STORE)) continue;
       const k = clean(r.bhxmaingroupname), s = clean(r.subgroupname);
-      g[k] = (g[k] || 0) + n(r.revenuevat); sub[s] = (sub[s] || 0) + n(r.revenuevat);
+      const v = preKey ? n(r[preKey]) : n(r.revenuevat);
+      g[k] = (g[k] || 0) + v; sub[s] = (sub[s] || 0) + v;
     }
-    data.cat = { groups: g, subs: sub, total: Object.values(g).reduce((a, b) => a + b, 0), at: nowHM(), rows: rows.length };
+    data.cat = { groups: g, subs: sub, total: Object.values(g).reduce((a, b) => a + b, 0), novat: !!preKey, at: nowHM(), rows: rows.length };
   }
   save(LS, data);
   return id === "145" ? data.store : { total: Math.round(data.cat.total), groups: Object.keys(data.cat.groups).length, rows: data.cat.rows };
@@ -67,7 +71,7 @@ export async function collect() {
 
 // Ảnh báo cáo kiểu dashboard (nền tối, thẻ KPI, donut Offline/Online, biểu đồ cộng dồn theo khung, thanh ngành hàng).
 function draw(d, prev, slot, hist = []) {
-  const s = d.store, c = d.cat, total = s.offlineVat + s.onlineVat;
+  const s = d.store, c = d.cat, total = s.offline + s.online;
   const groups = Object.entries(c.groups).sort((a, b) => b[1] - a[1]);
   const subs = Object.entries(c.subs).sort((a, b) => b[1] - a[1]).slice(0, 8);
   const pts = hist.filter(p => p.slot < slot).concat([{ slot, total, bills: s.bills }]);
@@ -106,30 +110,30 @@ function draw(d, prev, slot, hist = []) {
 
   // hero: tổng DT + donut
   card(P, y, CW, hHero);
-  font("bold", 18); txt("TỔNG DOANH THU (CÓ VAT)", P + 28, y + 44, C.sub);
+  font("bold", 18); txt("TỔNG DOANH THU (CHƯA VAT)", P + 28, y + 44, C.sub);
   font("900", 64); txt(fmt(total), P + 28, y + 118, C.text);
   const tw = x.measureText(fmt(total)).width; font("bold", 28); txt("đ", P + 34 + tw, y + 118, C.sub);
   let cxp = P + 28;
   if (prev) {
-    const pt = prev.store.offlineVat + prev.store.onlineVat, add = total - pt;
+    const pt = prev.store.offline + prev.store.online, add = total - pt;
     cxp += chip(`▲ +${fmt(add)}đ so với ${slotName(prev.slot)}`, cxp, y + 146, add >= 0 ? C.g : C.red) + 10;
     if (pt > 0) cxp += chip(`+${((add / pt) * 100).toFixed(1)}%`, cxp, y + 146, C.b) + 10;
   } else chip("Khung đầu tiên trong ngày", cxp, y + 146, C.b);
   // donut
-  const dx = W - P - 150, dy = y + hHero / 2, R = 78, off = s.offlineVat / (total || 1);
+  const dx = W - P - 150, dy = y + hHero / 2, R = 78, off = s.offline / (total || 1);
   x.lineWidth = 24; x.lineCap = "butt";
   x.beginPath(); x.arc(dx, dy, R, -Math.PI / 2, -Math.PI / 2 + off * Math.PI * 2); x.strokeStyle = C.g; x.stroke();
   x.beginPath(); x.arc(dx, dy, R, -Math.PI / 2 + off * Math.PI * 2, Math.PI * 1.5); x.strokeStyle = C.b; x.stroke();
   font("bold", 15); txt("OFFLINE", dx, dy - 4, C.sub, "center"); font("900", 26); txt(Math.round(off * 100) + "%", dx, dy + 26, C.text, "center");
   const lx = dx - R - 230;
-  [[C.g, "Offline", s.offlineVat], [C.b, "Online", s.onlineVat]].forEach(([col, t, v], i) => {
+  [[C.g, "Offline", s.offline], [C.b, "Online", s.online]].forEach(([col, t, v], i) => {
     const ly = dy - 34 + i * 64; rr(lx, ly - 12, 12, 12, 3, col);
     font("normal", 17); txt(t, lx + 22, ly, C.sub); font("bold", 22); txt(fmt(v), lx + 22, ly + 28, C.text);
   });
   y += hHero + GAP;
 
   // KPI
-  const per = s.bills ? total / s.bills : 0, pPer = prev && prev.store.bills ? (prev.store.offlineVat + prev.store.onlineVat) / prev.store.bills : null;
+  const per = s.bills ? total / s.bills : 0, pPer = prev && prev.store.bills ? (prev.store.offline + prev.store.online) / prev.store.bills : null;
   const top1 = groups[0];
   const kpis = [
     ["SỐ BILL", fmt(s.bills), prev ? `+${fmt(s.bills - prev.store.bills)} bill` : "", C.g],
@@ -200,17 +204,26 @@ function draw(d, prev, slot, hist = []) {
   y += hTop + 24;
 
   // chân trang
-  font("normal", 15); txt("Nguồn: POS Bách Hoá Xanh – DT theo siêu thị (145) & DT theo ngành hàng (336). Doanh thu có VAT.", P, y + 6, C.dim);
+  font("normal", 15); txt("Nguồn: POS Bách Hoá Xanh – DT theo siêu thị (145) & DT theo ngành hàng (336). Doanh thu chưa VAT.", P, y + 6, C.dim);
   if (Math.abs(c.total - total) > 1000) { font("bold", 15); txt(`⚠ Tổng ngành hàng lệch DT siêu thị ${fmt(c.total - total)}đ (2 báo cáo lấy cách nhau vài phút).`, P, y + 30, C.warn); }
   return cv;
 }
 
+// Ngành hàng về chưa VAT: nếu báo cáo 336 chỉ có cột có VAT thì quy đổi theo tỉ lệ chưa VAT / có VAT của siêu thị (145).
+function noVat(d) {
+  if (!d.cat || d.cat.novat) return d;
+  const s = d.store, k = (s.offlineVat + s.onlineVat) ? (s.offline + s.online) / (s.offlineVat + s.onlineVat) : 1;
+  const sc = o => Object.fromEntries(Object.entries(o).map(([a, v]) => [a, v * k]));
+  return { ...d, cat: { ...d.cat, groups: sc(d.cat.groups), subs: sc(d.cat.subs), total: d.cat.total * k, novat: "scaled" } };
+}
+
 export async function send({ key, slot, dryRun = false, to } = {}) {
-  const d = load(LS);
+  let d = load(LS);
   if (!d || d.date !== today() || !d.store || !d.cat) throw Error("Chưa đủ dữ liệu hôm nay: chạy collect() ở trang 145 và 336 trước");
-  const total = d.store.offlineVat + d.store.onlineVat;
+  d = noVat(d);
+  const total = d.store.offline + d.store.online;
   let prev = load(PREV); if (!prev || prev.date !== d.date || prev.slot >= slot) prev = null;
-  const check = { total: Math.round(total), catTotal: Math.round(d.cat.total), diff: Math.round(d.cat.total - total), bills: d.store.bills, prevSlot: prev?.slot || null, prevTotal: prev ? Math.round(prev.store.offlineVat + prev.store.onlineVat) : null };
+  const check = { total: Math.round(total), catTotal: Math.round(d.cat.total), diff: Math.round(d.cat.total - total), bills: d.store.bills, catBasis: d.cat.novat === true ? "cột chưa VAT" : "quy đổi", prevSlot: prev?.slot || null, prevTotal: prev ? Math.round(prev.store.offline + prev.store.online) : null };
   if (dryRun) return check;
   let hist = load(HIST); hist = hist && hist.date === d.date ? hist.points : [];
   const cv = draw(d, prev, slot, hist), image = cv.toDataURL("image/jpeg", 0.9);
@@ -223,13 +236,14 @@ export async function send({ key, slot, dryRun = false, to } = {}) {
 
 // Báo cáo không gửi LINE: trả số liệu đã tính sẵn (kèm phần tăng thêm so với khung trước) và ghi nhớ khung này.
 export function report({ slot } = {}) {
-  const d = load(LS);
+  let d = load(LS);
   if (!d || d.date !== today() || !d.store || !d.cat) throw Error("Chưa đủ dữ liệu hôm nay: chạy collect() ở trang 145 và 336 trước");
+  d = noVat(d);
   let prev = load(PREV); if (!prev || prev.date !== d.date || prev.slot >= slot) prev = null;
-  const total = d.store.offlineVat + d.store.onlineVat, ptotal = prev ? prev.store.offlineVat + prev.store.onlineVat : null;
+  const total = d.store.offline + d.store.online, ptotal = prev ? prev.store.offline + prev.store.online : null;
   const out = {
     date: d.date, slot, posAt: d.store.at,
-    total: Math.round(total), offline: Math.round(d.store.offlineVat), online: Math.round(d.store.onlineVat),
+    total: Math.round(total), offline: Math.round(d.store.offline), online: Math.round(d.store.online),
     bills: d.store.bills, perBill: d.store.bills ? Math.round(total / d.store.bills) : 0,
     catTotal: Math.round(d.cat.total), diff: Math.round(d.cat.total - total),
     prevSlot: prev?.slot || null, addTotal: prev ? Math.round(total - ptotal) : null, addBills: prev ? d.store.bills - prev.store.bills : null,
