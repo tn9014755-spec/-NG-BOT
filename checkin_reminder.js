@@ -96,12 +96,13 @@ function groups(mtTargets) {
   const s = state(); if (s.groupId) return [s.groupId];
   return mtTargets();
 }
-function message(ca, hour, codes) {
+function message(ca, hour, codes, prefix = "") {
   const body = `⏰ ${hour}H – BC CHECKING (ca ${ca})\n${NAME} check-in và báo cáo checking nhé!\n📋 Ca hôm nay: ${codes}`;
   const uid = userId();
-  if (!uid) return { type: "text", text: `@${NAME} ` + body };
-  const tag = "@" + NAME;
-  return { type: "text", text: `${tag} ${body}`, mention: { mentionees: [{ index: 0, length: tag.length, userId: uid }] } };
+  const plain = { type: "text", text: `${prefix}@${NAME} ` + body };
+  if (!uid) return { main: plain, plain };
+  const safe = (t) => String(t).replace(/[{}]/g, c => c + c); // textV2: { } phải nhân đôi
+  return { main: { type: "textV2", text: `${safe(prefix)}{dang} ${safe(body)}`, substitution: { dang: { type: "mention", mentionee: { type: "user", userId: uid } } } }, plain };
 }
 
 async function tick(push, mtTargets) {
@@ -115,8 +116,9 @@ async function tick(push, mtTargets) {
     const key = `${now.day}|${now.hour}|${g}`;
     if (s.sent[key]) continue;
     s.sent[key] = Date.now(); saveState(s);
-    let ok = await push(g, [message(ca, now.hour, codes)]);
-    if (!ok) ok = await push(g, [{ type: "text", text: message(ca, now.hour, codes).text }]);
+    const m = message(ca, now.hour, codes);
+    let ok = await push(g, [m.main]);
+    if (!ok && m.main !== m.plain) ok = await push(g, [m.plain]);
     console.log(`⏰ CHECKING → ${now.day} ${now.hour}h ca ${ca} (${codes}, ${src}) → ${g}: ${ok ? "OK" : "LỖI"}`);
   }
   for (const k of Object.keys(s.sent)) if (!k.startsWith(now.day)) delete s.sent[k];
@@ -168,11 +170,10 @@ function register(app, { push, mtTargets, keyOk }) {
     if (!keyOk(req.get("x-push-key"))) return res.status(401).json({ ok: false });
     const now = vnNow(), { codes } = await codesFor(now.day, now);
     const ca = +req.query.ca || 5, hour = hourOf[ca] || 16, c = String(req.query.codes || codes || "?");
-    const msg = message(ca, hour, c); msg.text = "🧪 TEST " + msg.text;
-    if (msg.mention) msg.mention.mentionees[0].index += 8;
+    const m = message(ca, hour, c, "🧪 TEST ");
     const out = [];
-    for (const g of groups(mtTargets)) out.push(await push(g, [msg]));
-    res.json({ ok: out.some(Boolean), sent: out.length, tag: !!msg.mention });
+    for (const g of groups(mtTargets)) { let ok = await push(g, [m.main]); if (!ok && m.main !== m.plain) ok = await push(g, [m.plain]); out.push(ok); }
+    res.json({ ok: out.some(Boolean), sent: out.length, tag: m.main !== m.plain });
   });
   app.options("/api/checkin-test", (_, res) => { res.set("Access-Control-Allow-Origin", "*"); res.set("Access-Control-Allow-Headers", "x-push-key"); res.status(204).end(); });
   app.options("/api/checkin-user", (_, res) => { res.set("Access-Control-Allow-Origin", "*"); res.set("Access-Control-Allow-Headers", "x-push-key"); res.status(204).end(); });
