@@ -6,10 +6,15 @@ const express = require("express"), crypto = require("crypto"), fs = require("fs
 const DIR = path.join(__dirname, "data", "flash_sale");
 fs.mkdirSync(DIR, { recursive: true });
 
+// Bỏ dấu cách / xuống dòng / dấu nháy thừa khi dán khoá vào Render.
+const clean = (s) => String(s || "").trim().replace(/^["']|["']$/g, "").trim();
+// Dấu vân tay ngắn của khoá (không lộ khoá) để so trong log khi bị 401.
+const fp = (s) => (s ? crypto.createHash("sha256").update(s).digest("hex").slice(0, 6) : "none");
 function keyOk(given) {
-  const want = process.env.FLASH_PUSH_KEY || "";
+  const want = clean(process.env.FLASH_PUSH_KEY);
+  given = clean(given);
   if (!want || !given) return false;
-  const a = Buffer.from(String(given)), b = Buffer.from(want);
+  const a = Buffer.from(given), b = Buffer.from(want);
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 function cors(res) {
@@ -43,7 +48,10 @@ module.exports = function register(app, { push, targets }) {
   app.options("/api/flash-sale", (_, res) => { cors(res); res.status(204).end(); });
   app.post("/api/flash-sale", express.json({ limit: "12mb" }), async (req, res) => {
     cors(res);
-    if (!keyOk(req.get("x-push-key"))) return res.status(401).json({ ok: false, error: "sai khoá" });
+    if (!keyOk(req.get("x-push-key"))) {
+      console.warn("🛒 FLASH SALE PUSH 401: khoá gửi lên", fp(clean(req.get("x-push-key"))), "≠ khoá Render", fp(clean(process.env.FLASH_PUSH_KEY)));
+      return res.status(401).json({ ok: false, error: "sai khoá" });
+    }
     try {
       const raw = String(req.body?.image || "").replace(/^data:image\/\w+;base64,/, "");
       const env0 = String(process.env.FLASH_SALE_TO || "").split(/[;,\s]+/).filter(Boolean);
@@ -76,5 +84,5 @@ module.exports = function register(app, { push, targets }) {
       res.status(500).json({ ok: false, error: String(e.message || e) });
     }
   });
-  console.log("🛒 FLASH SALE PUSH: /api/flash-sale", process.env.FLASH_PUSH_KEY ? "(key OK)" : "(THIẾU FLASH_PUSH_KEY)");
+  console.log("🛒 FLASH SALE PUSH: /api/flash-sale", clean(process.env.FLASH_PUSH_KEY) ? `(key fp ${fp(clean(process.env.FLASH_PUSH_KEY))})` : "(THIẾU FLASH_PUSH_KEY)");
 };
