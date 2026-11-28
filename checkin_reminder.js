@@ -162,6 +162,19 @@ function register(app, { push, mtTargets, keyOk }) {
     if (!keyOk(req.get("x-push-key"))) return res.status(401).json({ ok: false });
     const s = state(); res.json({ ok: true, userId: s.userId || null, groupId: s.groupId || null, env: !!process.env.CHECKIN_USER_ID });
   });
+  // gửi thử một tin nhắc có tag (cần khoá)
+  app.post("/api/checkin-test", async (req, res) => {
+    res.set("Access-Control-Allow-Origin", "*");
+    if (!keyOk(req.get("x-push-key"))) return res.status(401).json({ ok: false });
+    const now = vnNow(), { codes } = await codesFor(now.day, now);
+    const ca = +req.query.ca || 5, hour = hourOf[ca] || 16, c = String(req.query.codes || codes || "?");
+    const msg = message(ca, hour, c); msg.text = "🧪 TEST " + msg.text;
+    if (msg.mention) msg.mention.mentionees[0].index += 8;
+    const out = [];
+    for (const g of groups(mtTargets)) out.push(await push(g, [msg]));
+    res.json({ ok: out.some(Boolean), sent: out.length, tag: !!msg.mention });
+  });
+  app.options("/api/checkin-test", (_, res) => { res.set("Access-Control-Allow-Origin", "*"); res.set("Access-Control-Allow-Headers", "x-push-key"); res.status(204).end(); });
   app.options("/api/checkin-user", (_, res) => { res.set("Access-Control-Allow-Origin", "*"); res.set("Access-Control-Allow-Headers", "x-push-key"); res.status(204).end(); });
 }
 
