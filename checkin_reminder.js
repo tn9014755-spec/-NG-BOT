@@ -123,6 +123,19 @@ async function tick(push, mtTargets) {
   saveState(s);
 }
 
+// Tự nhận ra tài khoản LINE của anh khi anh nhắn bất kỳ tin nào trong nhóm:
+// tên hiển thị chứa CHECKIN_MATCH (mặc định mã NV "147998").
+const seen = new Set();
+async function observe(src, line, API) {
+  const uid = src?.userId, gid = src?.groupId;
+  if (!uid || !gid || userId() || seen.has(uid)) return;
+  seen.add(uid);
+  const r = await line(`${API}/group/${gid}/member/${uid}`);
+  if (!r.ok) return;
+  const p = await r.json();
+  const match = String(process.env.CHECKIN_MATCH || "147998");
+  if (String(p.displayName || "").includes(match)) { enable(uid, gid); console.log("⏰ CHECKING → nhận ra", p.displayName); }
+}
 function enable(uid, groupId) { const s = state(); s.userId = uid || s.userId; s.groupId = groupId || s.groupId; saveState(s); console.log("⏰ CHECKING → BẬT, user", uid, "nhóm", groupId); }
 
 async function preview(days = 7) {
@@ -158,4 +171,4 @@ function start(push, mtTargets) {
   tick(push, mtTargets).catch(e => console.error("❌ CHECKING", e));
 }
 
-module.exports = { start, enable, register, preview, startCas, sheetToSchedule, parseCsv };
+module.exports = { start, enable, observe, register, preview, startCas, sheetToSchedule, parseCsv };
